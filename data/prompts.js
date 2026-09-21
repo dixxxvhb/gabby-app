@@ -18,7 +18,7 @@
       '{"title":"","org":"","where":"","when":"","why":"","link":""}.',
       "title is the role or call. org is the company or studio. where is city and venue or 'online'.",
       "when is the date, deadline or cadence ('rolling', 'monthly open call'). why is one short sentence",
-      "tying it to this dancer's styles and level. link is a real URL if you have one, otherwise an empty string.",
+      "tying it to this dancer's styles and level. leave link as an empty string; do not invent URLs.",
       "Return between 6 and 10 items. No emojis."
     ].join(" "),
 
@@ -85,12 +85,12 @@
 
   /* ---- Gigs fallback: 8 Miami-flavored cards ---- */
   var GIGS_FALLBACK = [
-    { title: "Open dance call", org: "Royal Caribbean Productions", where: "Miami, FL", when: "Recurring open calls, check the casting calendar", why: "Miami is the company's home base, and their contracts hire strong jazz and commercial dancers.", link: "https://www.royalcaribbeanproductions.com/" },
+    { title: "Open dance call", org: "Royal Caribbean Productions", where: "Miami, FL", when: "Recurring open calls, check the casting calendar", why: "Miami is the company's home base, and their contracts hire strong jazz and commercial dancers.", link: "https://royalcaribbeanentertainment.com/productions/upcoming-auditions/" },
     { title: "Performer auditions", org: "Norwegian Creative Studios", where: "Miami and touring calls", when: "Rolling, posted per production", why: "Cruise production shows want versatile dancers who move between jazz, contemporary and partnering.", link: "https://www.ncl.com/about/careers" },
     { title: "Entertainment auditions", org: "Carnival Entertainment", where: "Miami, FL", when: "Seasonal calls", why: "Carnival is headquartered in Miami and casts dancers for production shows year round.", link: "https://www.carnival.com/about-carnival/careers" },
     { title: "Theme park performer call", org: "Disney Auditions", where: "Orlando, FL, a short drive north", when: "Posted continuously", why: "Parks cast trained dancers for parades and stage shows, and the Florida calls run all year.", link: "https://www.disneyauditions.com/" },
     { title: "Music video and commercial casting", org: "Local Miami casting and production houses", where: "Miami and Miami Beach", when: "Short notice, usually 2 to 5 days out", why: "Miami shoots a lot of Latin music video work, and commercial dancers book fast here.", link: "https://www.backstage.com/casting/" },
-    { title: "Company audition", org: "Contemporary companies in South Florida", where: "Miami and Fort Lauderdale", when: "Usually late summer into fall", why: "Contemporary training reads well in company auditions and gives you a season-long anchor.", link: "https://danceinforma.com/category/auditions/" },
+    { title: "Company audition", org: "Contemporary companies in South Florida", where: "Miami and Fort Lauderdale", when: "Usually late summer into fall", why: "Contemporary training reads well in company auditions and gives you a season-long anchor.", link: "https://www.danceinforma.com/auditions/" },
     { title: "Studio faculty opening", org: "Miami-area dance studios", where: "Miami-Dade and Broward", when: "Hiring spikes in July and August", why: "Teaching pays steady during audition season and keeps you in the room every week.", link: "https://www.backstage.com/jobs/" },
     { title: "Agency representation submission", org: "Commercial dance agencies", where: "Miami and Los Angeles submissions", when: "Rolling submissions", why: "Representation is what turns one-off bookings into a pipeline of auditions.", link: "https://www.castingnetworks.com/" }
   ];
@@ -103,11 +103,11 @@
       { name: "Backstage auditions", url: "https://www.backstage.com/casting/" },
       { name: "Casting Networks", url: "https://www.castingnetworks.com/" },
       { name: "Actors Access", url: "https://www.actorsaccess.com/" },
-      { name: "Dance Informa auditions", url: "https://danceinforma.com/category/auditions/" },
-      { name: "Royal Caribbean Productions", url: "https://www.royalcaribbeanproductions.com/" },
+      { name: "Dance Informa auditions", url: "https://www.danceinforma.com/auditions/" },
+      { name: "Royal Caribbean Productions", url: "https://royalcaribbeanentertainment.com/productions/upcoming-auditions/" },
       { name: "Norwegian Creative Studios", url: "https://www.ncl.com/about/careers" },
       { name: "Disney Auditions", url: "https://www.disneyauditions.com/" },
-      { name: "Universal Orlando auditions", url: "https://www.universalorlandojobs.com/entertainment" },
+      { name: "Universal Orlando auditions", url: "https://jobs.universalparks.com/auditions/" },
       { name: "Carnival Entertainment", url: "https://www.carnival.com/about-carnival/careers" },
       { name: "Instagram: #" + city + "dancers", url: "https://www.instagram.com/explore/tags/" + city + "dancers/" },
       { name: "Instagram: #" + city + "auditions", url: "https://www.instagram.com/explore/tags/" + city + "auditions/" }

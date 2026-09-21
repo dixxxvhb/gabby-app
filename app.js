@@ -5,8 +5,19 @@
   var D = window.BB_DATA;
   var NS = "bluebird.";
   var VERSION = "3.0";
-  var MODEL = "gemini-3.6-flash";
-  var ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/" + MODEL + ":generateContent";
+  // Free-tier quotas are per model, so walk a chain when one is exhausted or retired.
+  var MODELS = ["gemini-3.6-flash", "gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-latest",
+                "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3-flash-preview"];
+  var MODEL = MODELS[0];
+  function endpointFor(m) { return "https://generativelanguage.googleapis.com/v1beta/models/" + m + ":generateContent"; }
+  function modelIndex() {
+    try {
+      var rec = JSON.parse(sessionStorage.getItem("bluebird.modelIdx") || "null");
+      if (rec && Date.now() - rec.t < 15 * 60 * 1000 && rec.i < MODELS.length) return rec.i;
+    } catch (e) {}
+    return 0;
+  }
+  function rememberModel(i) { try { sessionStorage.setItem("bluebird.modelIdx", JSON.stringify({ i: i, t: Date.now() })); } catch (e) {} }
 
   /* ============ storage ============ */
   var store = {
@@ -122,25 +133,33 @@
   /* ============ gemini ============ */
   function hasKey() { return !!store.get("geminiKey", ""); }
 
-  function gemini(opts, attempt) {
+  function gemini(opts, attempt, mi) {
     attempt = attempt || 0;
+    if (mi === undefined) mi = modelIndex();
     var key = store.get("geminiKey", "");
     if (!key) return Promise.reject(new Error("no key"));
+    var model = MODELS[mi];
     var body = { contents: opts.contents };
     if (opts.system) body.systemInstruction = { parts: [{ text: opts.system }] };
     if (opts.tools) body.tools = opts.tools;
     if (opts.json) body.generationConfig = { responseMimeType: "application/json" };
-    return fetch(ENDPOINT, {
+    return fetch(endpointFor(model), {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify(body)
     }).then(function (r) {
+      var exhausted = r.status === 429 || r.status === 404 || (r.status === 503 && attempt >= 1);
+      if (exhausted && mi + 1 < MODELS.length) {
+        // this model is out of free quota, retired, or swamped: move down the chain
+        return gemini(opts, 0, mi + 1).then(function (out) { return { _done: out }; });
+      }
       if ((r.status === 503 || r.status === 500) && attempt < 2) {
         return new Promise(function (res) { setTimeout(res, 1500 * (attempt + 1)); })
-          .then(function () { return gemini(opts, attempt + 1); })
+          .then(function () { return gemini(opts, attempt + 1, mi); })
           .then(function (out) { return { _done: out }; });
       }
       if (!r.ok) throw new Error("http " + r.status);
+      rememberModel(mi);
       return r.json();
     }).then(function (j) {
       if (j && j._done) return j._done;
@@ -242,6 +261,11 @@
     return savedGigs().some(function (s) { return gigKey(s) === gigKey(g); });
   }
 
+  function searchUrl(g) {
+    var q = [g.org, g.title, "audition"].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+    return "https://www.google.com/search?q=" + encodeURIComponent(q);
+  }
+
   function gigCard(g, ctx) {
     var link = safeUrl(g.link);
     var key = gigKey(g);
@@ -255,6 +279,7 @@
         '<button class="btn small pitch-gig" data-key="' + esc(key) + '">Draft my pitch</button>' +
         '<button class="btn small ghost prep-gig" data-key="' + esc(key) + '">Prep me</button>' +
         '<button class="btn small ghost cal-gig" data-key="' + esc(key) + '">Add to my calendar</button>' +
+        '<a class="btn small ghost" href="' + esc(searchUrl(g)) + '" target="_blank" rel="noopener">Look it up ' + ico("i-out") + "</a>" +
         (link ? '<a class="btn small ghost" href="' + esc(link) + '" target="_blank" rel="noopener">Open ' + ico("i-out") + "</a>" : "") +
       "</div>" +
       '<div class="pitch-slot" data-key="' + esc(key) + '"></div>' +
@@ -706,7 +731,8 @@
       var arr = parseGigJson(res.text);
       var chunks = (res.grounding && res.grounding.groundingChunks) || [];
       arr.forEach(function (g, i) {
-        if (!safeUrl(g.link) && chunks[i] && chunks[i].web && chunks[i].web.uri) g.link = chunks[i].web.uri;
+        // model-invented URLs go stale or 404; keep a link only when Google grounding supplied it
+        g.link = (chunks[i] && chunks[i].web && chunks[i].web.uri) ? chunks[i].web.uri : "";
       });
       gigsState.results = arr;
       gigsState.offline = false;
