@@ -4,7 +4,7 @@
 
   var D = window.BB_DATA;
   var NS = "bluebird.";
-  var MODEL = "gemini-2.5-flash";
+  var MODEL = "gemini-3.6-flash";
   var ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/" + MODEL + ":generateContent";
 
   /* ============ storage ============ */
@@ -388,10 +388,10 @@
       " Find opportunities near " + loc + " for these styles: " +
       ((p.styles && p.styles.join(", ")) || "contemporary, jazz, commercial") + ".";
 
-    gemini({
-      system: D.SYSTEM.gigs,
-      contents: [{ role: "user", parts: [{ text: ask }] }],
-      tools: [{ google_search: {} }]
+    var req = { system: D.SYSTEM.gigs, contents: [{ role: "user", parts: [{ text: ask }] }] };
+    gemini(Object.assign({ tools: [{ google_search: {} }] }, req)).catch(function () {
+      // grounding is quota-limited on free keys; retry from the model's own knowledge
+      return gemini(req);
     }).then(function (res) {
       var arr = parseGigJson(res.text);
       var chunks = (res.grounding && res.grounding.groundingChunks) || [];
