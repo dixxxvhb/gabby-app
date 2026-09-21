@@ -1,0 +1,20 @@
+{
+  "opens_without_key": true,
+  "tabs_render": ["gigs", "theo", "quiet", "daily"],
+  "trivia_count": 200,
+  "gemini_fallback_pill": true,
+  "crisis_card": true,
+  "localstorage_namespace_ok": true,
+  "no_emoji_in_source": true,
+  "no_key_in_source": true,
+  "console_errors": [],
+  "shots": [
+    "docs/shots/01-welcome.png",
+    "docs/shots/02-gigs.png",
+    "docs/shots/03-theo.png",
+    "docs/shots/04-quiet.png",
+    "docs/shots/05-daily.png",
+    "docs/shots/06-settings.png",
+    "docs/shots/07-desktop-gigs.png"
+  ]
+}

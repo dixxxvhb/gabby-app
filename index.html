@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#DCEFFB">
+<title>Bluebird</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400;1,9..144,600&family=Nunito:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- sprite of line icons -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <g id="i-gigs"><path d="M4 8h16v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8Z"/><path d="M9 8V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><path d="M4 12h16"/></g>
+    <g id="i-theo"><path d="M12 20s-7-4.5-7-9.2A3.9 3.9 0 0 1 12 8.4a3.9 3.9 0 0 1 7 2.4C19 15.5 12 20 12 20Z"/></g>
+    <g id="i-quiet"><path d="M12 4c4.4 0 8 3.1 8 7s-3.6 7-8 7a9.6 9.6 0 0 1-2.6-.35L5 19.5l1.1-3.1A6.6 6.6 0 0 1 4 11c0-3.9 3.6-7 8-7Z"/></g>
+    <g id="i-daily"><path d="M12 4.5 14 9.4l5.3.4-4 3.5 1.2 5.2-4.5-2.8-4.5 2.8L8.7 13.3l-4-3.5 5.3-.4L12 4.5Z"/></g>
+    <g id="i-gear"><path d="M5 7.5h5M14 7.5h5M5 16.5h9M18 16.5h1"/><circle cx="12" cy="7.5" r="2.3"/><circle cx="16" cy="16.5" r="2.3"/></g>
+    <g id="i-heart"><path d="M12 20s-7-4.5-7-9.2A3.9 3.9 0 0 1 12 8.4a3.9 3.9 0 0 1 7 2.4C19 15.5 12 20 12 20Z"/></g>
+    <g id="i-send"><path d="m5 12 15-7-6 16-2.6-6.4L5 12Z"/></g>
+    <g id="i-copy"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 6.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h.5"/></g>
+    <g id="i-back"><path d="M14.5 5.5 8 12l6.5 6.5"/></g>
+    <g id="i-close"><path d="M6.5 6.5 17.5 17.5M17.5 6.5 6.5 17.5"/></g>
+    <g id="i-check"><path d="m5 12.5 4.5 4.5L19 7"/></g>
+    <g id="i-out"><path d="M13 5h6v6"/><path d="M19 5 11 13"/><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/></g>
+    <g id="i-book"><path d="M5 4.5h9a3 3 0 0 1 3 3V20H8a3 3 0 0 1-3-3V4.5Z"/><path d="M17 7.5h2V20"/><path d="M8 9h6M8 12.5h6"/></g>
+    <g id="i-flame"><path d="M12 3.5s4.8 4 4.8 8.4A4.8 4.8 0 0 1 12 20.5a4.8 4.8 0 0 1-4.8-4.8c0-2 1.3-3.4 1.3-3.4s.4 1.6 1.6 2c0-2.4 1.9-4.6 1.9-4.6s-.6 2.2.6 3.1c.9-1.2-.6-4-.6-9.3Z"/></g>
+    <g id="i-lock"><rect x="5" y="10.5" width="14" height="9.5" rx="2.2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></g>
+  </defs>
+</svg>
+
+<header class="bar" id="bar">
+  <div class="brand">
+    <span class="bird" id="bird" aria-hidden="true">
+      <svg viewBox="0 0 44 40">
+        <ellipse class="bird-body" cx="21" cy="24" rx="13.5" ry="12.5"/>
+        <circle class="bird-head" cx="30" cy="13.5" r="8.5"/>
+        <path class="bird-wing" d="M15 22c5.5-1.5 9.5 1 11 5.5-4.5 2.5-9.5 1-11-5.5Z"/>
+        <path class="bird-beak" d="M38 13.2 43.5 15l-5.2 2.4Z"/>
+        <path class="bird-tail" d="M8.5 20.5 1 16.5l3.5 7.5Z"/>
+        <ellipse class="bird-eye" cx="32.4" cy="11.8" rx="1.5" ry="1.7"/>
+        <path class="bird-bow" d="M25 5.6 21 3.2v4.9l4-2.5Zm0 0 4-2.4v4.9l-4-2.5Z"/>
+      </svg>
+    </span>
+    <h1 class="wordmark">Bluebird</h1>
+  </div>
+  <button class="icon-btn" id="openSettings" aria-label="Settings">
+    <svg class="ic" viewBox="0 0 24 24"><use href="#i-gear"/></svg>
+  </button>
+</header>
+
+<main id="main">
+  <section class="view" id="view-gigs" hidden></section>
+  <section class="view" id="view-theo" hidden></section>
+  <section class="view" id="view-quiet" hidden></section>
+  <section class="view" id="view-daily" hidden></section>
+</main>
+
+<nav class="tabs" id="tabs" aria-label="Sections">
+  <button class="tab" data-tab="gigs"><svg class="ic" viewBox="0 0 24 24"><use href="#i-gigs"/></svg><span>Gigs</span></button>
+  <button class="tab" data-tab="theo"><svg class="ic" viewBox="0 0 24 24"><use href="#i-theo"/></svg><span>Theo</span></button>
+  <button class="tab" data-tab="quiet"><svg class="ic" viewBox="0 0 24 24"><use href="#i-quiet"/></svg><span>Quiet Room</span></button>
+  <button class="tab" data-tab="daily"><svg class="ic" viewBox="0 0 24 24"><use href="#i-daily"/></svg><span>Daily</span></button>
+</nav>
+
+<!-- settings sheet -->
+<div class="scrim" id="scrim" hidden></div>
+<section class="sheet" id="sheet" hidden aria-label="Settings">
+  <div class="sheet-grab"></div>
+  <div class="sheet-head">
+    <h2>Settings</h2>
+    <button class="icon-btn" id="closeSettings" aria-label="Close settings">
+      <svg class="ic" viewBox="0 0 24 24"><use href="#i-close"/></svg>
+    </button>
+  </div>
+  <div class="sheet-body" id="sheetBody"></div>
+</section>
+
+<!-- welcome -->
+<section class="welcome" id="welcome" hidden>
+  <div class="welcome-cards" id="welcomeCards"></div>
+  <div class="welcome-foot">
+    <div class="dots" id="welcomeDots"></div>
+    <button class="btn primary" id="welcomeNext">Next</button>
+  </div>
+</section>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="data/prompts.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
