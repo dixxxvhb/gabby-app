@@ -4,7 +4,7 @@
 
   var D = window.BB_DATA;
   var NS = "bluebird.";
-  var VERSION = "2.0";
+  var VERSION = "2.1";
   var MODEL = "gemini-3.6-flash";
   var ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/" + MODEL + ":generateContent";
 
@@ -35,7 +35,7 @@
 
   var DEFAULT_PROFILE = {
     name: "Gabby", city: "Miami, FL", styles: ["Contemporary", "Jazz", "Commercial"],
-    height: "", agency: "", availability: "", union: "", dream: "", reel: ""
+    height: "", agency: "", availability: "", union: "", dream: "", reel: "", credits: ""
   };
 
   function profile() {
@@ -86,6 +86,28 @@
     var d = new Date();
     d.setDate(d.getDate() + n);
     return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+  function relTime(ts) {
+    if (!ts) return "";
+    var diff = Date.now() - ts;
+    var m = Math.floor(diff / 60000);
+    if (m < 1) return "just now";
+    if (m < 60) return m + "m ago";
+    var h = Math.floor(m / 60);
+    if (h < 24) return h + "h ago";
+    var d = new Date(ts);
+    return (d.getMonth() + 1) + "/" + d.getDate();
+  }
+  function auditionCountdown(dateStr) {
+    var d = new Date(dateStr + "T00:00:00");
+    var now = new Date();
+    now.setHours(0, 0, 0, 0);
+    var diffDays = Math.round((d - now) / 86400000);
+    if (diffDays === 0) return "today";
+    if (diffDays === 1) return "tomorrow";
+    if (diffDays > 1) return "in " + diffDays + " days";
+    if (diffDays === -1) return "yesterday";
+    return Math.abs(diffDays) + " days ago";
   }
   function hash(str) {
     var h = 2166136261;
@@ -205,7 +227,12 @@
   /* ================================================================
      TAB 1 - GIGS
      ================================================================ */
-  var gigsState = { sub: "results", results: null, offline: false, busy: false, intake: null };
+  var gigsState = { sub: "results", results: null, offline: false, busy: false, intake: null, radius: "nearby", loc: null, at: null, meOpen: false };
+  var RADIUS_OPTS = [
+    { key: "nearby", label: "Nearby" },
+    { key: "statewide", label: "Statewide" },
+    { key: "anywhere", label: "Anywhere I'd travel" }
+  ];
 
   function savedGigs() { return store.get("savedGigs", []); }
 
@@ -217,17 +244,136 @@
 
   function gigCard(g, ctx) {
     var link = safeUrl(g.link);
+    var key = gigKey(g);
+    var prepRec = store.get("prep", {})[key];
     return '<article class="card">' +
       "<h3>" + esc(g.title || "Opportunity") + "</h3>" +
       '<p class="meta">' + esc([g.org, g.where].filter(Boolean).join(" - ")) + (g.when ? " &middot; " + esc(g.when) : "") + "</p>" +
       (g.why ? "<p>" + esc(g.why) + "</p>" : "") +
       '<div class="card-row">' +
-        '<button class="btn small save-gig" data-key="' + esc(gigKey(g)) + '">' + ico("i-heart") + (isSaved(g) ? "Saved" : "Save") + "</button>" +
-        '<button class="btn small pitch-gig" data-key="' + esc(gigKey(g)) + '">Draft my pitch</button>' +
+        '<button class="btn small save-gig" data-key="' + esc(key) + '">' + ico("i-heart") + (isSaved(g) ? "Saved" : "Save") + "</button>" +
+        '<button class="btn small pitch-gig" data-key="' + esc(key) + '">Draft my pitch</button>' +
+        '<button class="btn small ghost prep-gig" data-key="' + esc(key) + '">Prep me</button>' +
+        '<button class="btn small ghost cal-gig" data-key="' + esc(key) + '">Add to my calendar</button>' +
         (link ? '<a class="btn small ghost" href="' + esc(link) + '" target="_blank" rel="noopener">Open ' + ico("i-out") + "</a>" : "") +
       "</div>" +
-      '<div class="pitch-slot" data-key="' + esc(gigKey(g)) + '"></div>' +
+      '<div class="pitch-slot" data-key="' + esc(key) + '"></div>' +
+      '<div class="prep-slot" data-key="' + esc(key) + '">' + (prepRec ? prepKitHtml(prepRec) : "") + "</div>" +
+      '<div class="cal-slot" data-key="' + esc(key) + '"></div>' +
       "</article>";
+  }
+
+  /* ---- prep kits ---- */
+  function buildPrepKit(obj) {
+    var items = [];
+    if (obj.wear) items.push("Wear: " + obj.wear);
+    if (obj.bring) items.push("Bring: " + obj.bring);
+    if (obj.style) items.push("Likely style: " + obj.style);
+    (obj.rehearse || []).slice(0, 3).forEach(function (r) { if (r) items.push("Rehearse: " + r); });
+    (obj.questions || []).slice(0, 2).forEach(function (q) { if (q) items.push("Ask: " + q); });
+    if (!items.length) throw new Error("empty kit");
+    return { items: items, encouragement: obj.encouragement || "" };
+  }
+
+  function parsePrepJson(text) {
+    var t = String(text).trim().replace(/^```[a-z]*\s*/i, "").replace(/```\s*$/, "").trim();
+    var a = t.indexOf("{"), b = t.lastIndexOf("}");
+    if (a < 0 || b < a) throw new Error("no object");
+    return buildPrepKit(JSON.parse(t.slice(a, b + 1)));
+  }
+
+  function fallbackPrepKit(g) {
+    return buildPrepKit({
+      wear: "Fitted layers you can move in, camera-ready but not costume-y.",
+      bring: "Water, resume with a photo, extra hair ties, and whatever shoes the call specifies.",
+      style: g.why ? "Likely close to your usual training style, based on the fit already noted." : "Assume a commercial or jazz-based combo unless the call says otherwise.",
+      rehearse: ["A sharp pirouette prep and a clean landing", "A grounded jazz walk across the floor", "One 8-count you can drop into instantly from muscle memory"],
+      questions: ["Is there a callback the same day or on a separate date?", "What should I know about the rate and schedule if I book it?"],
+      encouragement: "You have already done the work. This is just the room catching up to that."
+    });
+  }
+
+  function prepKitHtml(rec) {
+    return '<div class="card soft" style="margin-top:14px">' +
+      (rec.offline ? '<p class="meta" style="margin-bottom:8px">Starter kit ' + offlinePill() + "</p>" : "") +
+      '<div class="checklist">' +
+      rec.kit.items.map(function (item, i) {
+        return '<label class="checkitem"><input type="checkbox" data-i="' + i + '"' + (rec.checked[i] ? " checked" : "") + '><span>' + esc(item) + "</span></label>";
+      }).join("") +
+      "</div>" +
+      (rec.kit.encouragement ? '<p class="fact" style="margin-top:10px">' + esc(rec.kit.encouragement) + "</p>" : "") +
+      "</div>";
+  }
+
+  function wirePrepChecks(slot, key) {
+    $$("input[type=checkbox]", slot).forEach(function (cb) {
+      cb.onchange = function () {
+        var all = store.get("prep", {});
+        var rec = all[key];
+        if (!rec) return;
+        rec.checked[+cb.dataset.i] = cb.checked;
+        store.set("prep", all);
+      };
+    });
+  }
+
+  function prepGig(g, slot) {
+    if (!slot) return;
+    var key = gigKey(g);
+    slot.innerHTML = '<p class="fact">Building your prep kit...</p>';
+
+    function land(kit, off) {
+      var all = store.get("prep", {});
+      var rec = { kit: kit, checked: kit.items.map(function () { return false; }), offline: off };
+      all[key] = rec;
+      store.set("prep", all);
+      slot.innerHTML = prepKitHtml(rec);
+      wirePrepChecks(slot, key);
+    }
+
+    if (!hasKey()) { land(fallbackPrepKit(g), true); return; }
+
+    gemini({
+      system: D.SYSTEM.prep,
+      contents: [{ role: "user", parts: [{ text: "Dancer: " + profileBlurb() + "\nAudition: " + JSON.stringify(g) + "\nWrite the prep kit as JSON only." }] }],
+      json: true
+    }).then(function (r) { land(parsePrepJson(r.text), false); }).catch(function () { land(fallbackPrepKit(g), true); });
+  }
+
+  /* ---- audition calendar ---- */
+  function auditions() { return store.get("auditions", []); }
+
+  function toggleCalForm(g, slot) {
+    if (!slot) return;
+    if (slot.classList.contains("open")) { slot.innerHTML = ""; slot.classList.remove("open"); return; }
+    slot.classList.add("open");
+    var d0 = today();
+    slot.innerHTML = '<div class="card soft" style="margin-top:14px">' +
+      '<label class="field"><span>Date</span><input class="cal-date" type="date" value="' + d0 + '"></label>' +
+      '<label class="field"><span>Time (optional)</span><input class="cal-time" type="time"></label>' +
+      '<label class="field"><span>Place</span><input class="cal-place" placeholder="Where" value="' + esc(g.where || "") + '"></label>' +
+      '<label class="field" style="margin-bottom:0"><span>Notes</span><input class="cal-notes" placeholder="Optional"></label>' +
+      '<div class="card-row"><button class="btn primary small cal-save">Add to my calendar</button>' +
+      '<button class="btn ghost small cal-cancel">Cancel</button></div>' +
+      "</div>";
+    $(".cal-save", slot).onclick = function () {
+      var list = auditions();
+      list.push({
+        id: Date.now(),
+        gigKey: gigKey(g),
+        title: g.title || "Audition",
+        org: g.org || "",
+        date: $(".cal-date", slot).value || d0,
+        time: $(".cal-time", slot).value || "",
+        place: $(".cal-place", slot).value.trim(),
+        notes: $(".cal-notes", slot).value.trim()
+      });
+      store.set("auditions", list);
+      toast("Added to Upcoming");
+      slot.innerHTML = "";
+      slot.classList.remove("open");
+    };
+    $(".cal-cancel", slot).onclick = function () { slot.innerHTML = ""; slot.classList.remove("open"); };
   }
 
   function renderGigs() {
@@ -236,12 +382,24 @@
 
     if (gigsState.intake) { renderIntake(v); return; }
 
+    if (gigsState.results === null) {
+      var last = store.get("gigsLast", null);
+      if (last) {
+        gigsState.results = last.results;
+        gigsState.offline = last.offline;
+        gigsState.loc = last.loc;
+        gigsState.radius = last.radius || "nearby";
+        gigsState.at = last.at;
+      }
+    }
+
     var needIntake = !store.get("intakeDone", false) && (!p.height || !p.availability);
 
     var html = '<div class="stack">';
     html += '<div class="subtabs" id="gigSubs">' +
       '<button class="subtab" data-sub="results" aria-selected="' + (gigsState.sub === "results") + '">Results</button>' +
       '<button class="subtab" data-sub="saved" aria-selected="' + (gigsState.sub === "saved") + '">Saved</button>' +
+      '<button class="subtab" data-sub="upcoming" aria-selected="' + (gigsState.sub === "upcoming") + '">Upcoming</button>' +
       "</div>";
 
     if (gigsState.sub === "saved") {
@@ -253,6 +411,38 @@
       v.innerHTML = html;
       wireGigs(v);
       return;
+    }
+
+    if (gigsState.sub === "upcoming") {
+      var au = auditions().slice().sort(function (a, b) { return a.date.localeCompare(b.date); });
+      html += au.length
+        ? '<div class="stack">' + au.map(function (a) {
+            return '<article class="card">' +
+              "<h3>" + esc(a.title) + "</h3>" +
+              '<p class="meta">' + esc([a.org, a.place].filter(Boolean).join(" - ")) + "</p>" +
+              '<p class="meta">' + esc(a.date) + (a.time ? " at " + esc(a.time) : "") + ' &middot; <strong style="color:var(--blue)">' + esc(auditionCountdown(a.date)) + "</strong></p>" +
+              (a.notes ? "<p>" + esc(a.notes) + "</p>" : "") +
+              '<div class="card-row"><button class="btn small ics-dl" data-id="' + a.id + '">' + ico("i-out") + "Download .ics</button>" +
+              '<button class="btn small ghost aud-del" data-id="' + a.id + '">Remove</button></div>' +
+              "</article>";
+          }).join("") + "</div>"
+        : '<p class="empty">Nothing on the calendar yet. Add a date from any gig card.</p>';
+      html += "</div>";
+      v.innerHTML = html;
+      wireGigs(v);
+      return;
+    }
+
+    var bio = store.get("bio", null);
+    if (bio) {
+      html += '<article class="card baby meCard">' +
+        '<button class="me-toggle" id="meToggle" aria-expanded="' + gigsState.meOpen + '"><span>Me</span>' + ico("i-chevron") + "</button>" +
+        (gigsState.meOpen
+          ? '<div class="me-body"><p style="margin:0 0 10px">' + esc(bio.bio) + "</p>" +
+            '<ul class="me-bullets">' + bio.bullets.map(function (b) { return "<li>" + esc(b) + "</li>"; }).join("") + "</ul>" +
+            '<button class="btn small copy-bio">' + ico("i-copy") + "Copy</button></div>"
+          : "") +
+        "</article>";
     }
 
     if (needIntake) {
@@ -267,6 +457,12 @@
     html += '<div>' +
       '<label class="field"><span>Where are you looking</span>' +
       '<input id="gigLoc" value="' + esc(p.city || "Miami, FL") + '" placeholder="City or zip"></label>' +
+      '<span class="field" style="display:block"><span style="display:block;font-size:13px;font-weight:800;color:var(--grey);margin-bottom:6px">How far</span>' +
+      '<span class="chips" id="radiusChips">' +
+        RADIUS_OPTS.map(function (r) {
+          return '<button class="chip" data-radius="' + r.key + '" aria-pressed="' + (gigsState.radius === r.key) + '">' + esc(r.label) + "</button>";
+        }).join("") +
+      "</span></span>" +
       '<span class="field" style="display:block"><span style="display:block;font-size:13px;font-weight:800;color:var(--grey);margin-bottom:6px">What you dance</span>' +
       '<span class="chips" id="styleChips">' +
         D.STYLES.map(function (s) {
@@ -281,6 +477,7 @@
     if (gigsState.results) {
       html += "<div>" +
         '<h2 class="section-title">' + (gigsState.offline ? "Worth chasing " + offlinePill() : "What I found") + "</h2>" +
+        (gigsState.loc ? '<p class="meta" style="margin:-4px 0 12px">Searched ' + esc(gigsState.loc) + " &middot; " + esc(relTime(gigsState.at)) + "</p>" : "") +
         '<div class="stack">' + gigsState.results.map(function (g) { return gigCard(g, "results"); }).join("") + "</div>" +
         "</div>";
     }
@@ -306,6 +503,32 @@
     if (start) start.onclick = function () { gigsState.intake = { step: 0, answers: {}, log: [] }; renderGigs(); };
     var skip = $("#skipIntake", v);
     if (skip) skip.onclick = function () { store.set("intakeDone", true); renderGigs(); };
+
+    var meToggle = $("#meToggle", v);
+    if (meToggle) meToggle.onclick = function () { gigsState.meOpen = !gigsState.meOpen; renderGigs(); };
+    var copyBio = $(".copy-bio", v);
+    if (copyBio) copyBio.onclick = function () {
+      var bio = store.get("bio", null);
+      if (bio) copy(bio.bio + "\n\n" + bio.bullets.join("\n"));
+    };
+
+    $$(".ics-dl", v).forEach(function (b) {
+      b.onclick = function () {
+        var a = auditions().filter(function (x) { return String(x.id) === b.dataset.id; })[0];
+        if (a && window.BB_ICS) window.BB_ICS.download(a);
+      };
+    });
+    $$(".aud-del", v).forEach(function (b) {
+      b.onclick = function () {
+        var list = auditions().filter(function (x) { return String(x.id) !== b.dataset.id; });
+        store.set("auditions", list);
+        renderGigs();
+      };
+    });
+
+    $$("#radiusChips .chip", v).forEach(function (c) {
+      c.onclick = function () { gigsState.radius = c.dataset.radius; renderGigs(); };
+    });
 
     $$("#styleChips .chip", v).forEach(function (c) {
       c.onclick = function () {
@@ -347,8 +570,34 @@
         var g = pool.filter(function (x) { return gigKey(x) === b.dataset.key; })[0];
         if (!g) return;
         var slot = $$('.pitch-slot[data-key="' + CSS.escape(b.dataset.key) + '"]', v)[0];
-        draftPitch(g, slot, b);
+        draftPitch(g, slot);
       };
+    });
+
+    $$(".prep-gig", v).forEach(function (b) {
+      b.onclick = function () {
+        var pool = (gigsState.results || []).concat(savedGigs());
+        var g = pool.filter(function (x) { return gigKey(x) === b.dataset.key; })[0];
+        if (!g) return;
+        var slot = $$('.prep-slot[data-key="' + CSS.escape(b.dataset.key) + '"]', v)[0];
+        prepGig(g, slot);
+      };
+    });
+
+    $$(".cal-gig", v).forEach(function (b) {
+      b.onclick = function () {
+        var pool = (gigsState.results || []).concat(savedGigs());
+        var g = pool.filter(function (x) { return gigKey(x) === b.dataset.key; })[0];
+        if (!g) return;
+        var slot = $$('.cal-slot[data-key="' + CSS.escape(b.dataset.key) + '"]', v)[0];
+        toggleCalForm(g, slot);
+      };
+    });
+
+    $$(".prep-slot", v).forEach(function (slot) {
+      var key = slot.dataset.key;
+      var rec = store.get("prep", {})[key];
+      if (rec) wirePrepChecks(slot, key);
     });
   }
 
@@ -406,23 +655,43 @@
     return arr.filter(function (o) { return o && o.title; }).slice(0, 10);
   }
 
+  var RADIUS_PHRASE = {
+    nearby: "within a reasonable local driving distance of",
+    statewide: "anywhere within the same state as",
+    anywhere: "anywhere in the US or beyond that she would be willing to travel to, starting from"
+  };
+
   function findWork() {
     var p = profile();
     var loc = ($("#gigLoc") && $("#gigLoc").value.trim()) || p.city || "Miami, FL";
     p.city = loc; saveProfile(p);
     gigsState.busy = true; renderGigs();
 
+    function persist() {
+      gigsState.loc = loc;
+      gigsState.at = Date.now();
+      store.set("gigsLast", {
+        loc: gigsState.loc, radius: gigsState.radius,
+        results: gigsState.results, offline: gigsState.offline, at: gigsState.at
+      });
+    }
+
     function fallback() {
       gigsState.results = D.GIGS_FALLBACK;
       gigsState.offline = true;
       gigsState.busy = false;
+      persist();
       renderGigs();
     }
 
     if (!hasKey()) { setTimeout(fallback, 250); return; }
 
+    var zipMatch = /^\d{5}$/.test(loc);
+    var locDesc = zipMatch ? "zip " + loc + " (USA)" : loc;
+    var radiusPhrase = RADIUS_PHRASE[gigsState.radius] || RADIUS_PHRASE.nearby;
+
     var ask = "Dancer profile: " + profileBlurb() +
-      " Find opportunities near " + loc + " for these styles: " +
+      " Find opportunities " + radiusPhrase + " " + locDesc + " for these styles: " +
       ((p.styles && p.styles.join(", ")) || "contemporary, jazz, commercial") + ".";
 
     var req = { system: D.SYSTEM.gigs, contents: [{ role: "user", parts: [{ text: ask }] }] };
@@ -442,35 +711,74 @@
       gigsState.results = arr;
       gigsState.offline = false;
       gigsState.busy = false;
+      persist();
       renderGigs();
     }).catch(fallback);
   }
 
-  function draftPitch(g, slot, btn) {
+  function draftPitch(g, slot) {
     if (!slot) return;
-    slot.innerHTML = '<p class="fact">Writing...</p>';
+    slot.innerHTML = '<div class="chips" style="margin-top:14px">' +
+      '<button class="chip tone-chip" data-tone="warm" aria-pressed="true">Warm</button>' +
+      '<button class="chip tone-chip" data-tone="crisp" aria-pressed="false">Crisp</button>' +
+      "</div><div class=\"pitch-out\"></div>";
+    wireToneChips(slot, g);
+    generatePitch(g, slot, "warm");
+  }
+
+  function wireToneChips(slot, g) {
+    $$(".tone-chip", slot).forEach(function (c) {
+      c.onclick = function () {
+        $$(".tone-chip", slot).forEach(function (x) { x.setAttribute("aria-pressed", x === c ? "true" : "false"); });
+        generatePitch(g, slot, c.dataset.tone);
+      };
+    });
+  }
+
+  function generatePitch(g, slot, tone) {
+    var out = $(".pitch-out", slot);
+    if (!out) return;
+    out.innerHTML = '<p class="fact">Writing...</p>';
     var p = profile();
+    var bio = store.get("bio", null);
 
     function show(text, off) {
-      slot.innerHTML = '<div class="card soft" style="margin-top:14px">' +
+      out.innerHTML = '<div class="card soft" style="margin-top:10px">' +
         (off ? '<p class="meta" style="margin-bottom:8px">Starter draft ' + offlinePill() + "</p>" : "") +
         "<p style=\"white-space:pre-wrap;margin-bottom:12px\">" + esc(text) + "</p>" +
         '<button class="btn small copy-pitch">' + ico("i-copy") + "Copy</button></div>";
-      $(".copy-pitch", slot).onclick = function () { copy(text); };
+      var cbtn = $(".copy-pitch", out);
+      cbtn.onclick = function () {
+        copy(text);
+        cbtn.innerHTML = ico("i-check") + "Copied";
+        setTimeout(function () { cbtn.innerHTML = ico("i-copy") + "Copy"; }, 1500);
+      };
     }
 
-    var scripted = [
-      "Hi, my name is " + (p.name || "Gabby") + ", a dancer based in " + (p.city || "Miami, FL") + ", and I am reaching out about " + (g.title || "your current call") + " at " + (g.org || "your company") + ".",
-      "I train and work in " + ((p.styles && p.styles.join(", ")) || "contemporary, jazz and commercial") + (p.height ? ", and I am " + p.height : "") + ".",
-      "I would love to be considered, or to know when your next audition is.",
-      "Thank you for your time." + (p.reel ? " Reel: " + p.reel : "")
-    ].join("\n");
+    var scripted = tone === "crisp"
+      ? [
+          (p.name || "Gabby") + ", dancer based in " + (p.city || "Miami, FL") + ", writing about " + (g.title || "your current call") + " at " + (g.org || "your company") + ".",
+          "Trained in " + ((p.styles && p.styles.join(", ")) || "contemporary, jazz and commercial") + (p.height ? ", " + p.height : "") + ".",
+          "Available and ready to audition or submit materials.",
+          p.reel ? "Reel: " + p.reel : "Thank you."
+        ].join("\n")
+      : [
+          "Hi, my name is " + (p.name || "Gabby") + ", a dancer based in " + (p.city || "Miami, FL") + ", and I am reaching out about " + (g.title || "your current call") + " at " + (g.org || "your company") + ".",
+          "I train and work in " + ((p.styles && p.styles.join(", ")) || "contemporary, jazz and commercial") + (p.height ? ", and I am " + p.height : "") + ".",
+          "I would love to be considered, or to know when your next audition is.",
+          "Thank you for your time." + (p.reel ? " Reel: " + p.reel : "")
+        ].join("\n");
 
     if (!hasKey()) { show(scripted, true); return; }
 
+    var toneNote = tone === "crisp"
+      ? " Tone: crisp and efficient, no warmth padding, get straight to the point."
+      : " Tone: warm and personable while staying professional.";
+    var bioLine = bio && bio.bio ? ("\nHer bio: " + bio.bio) : "";
+
     gemini({
-      system: D.SYSTEM.pitch,
-      contents: [{ role: "user", parts: [{ text: "Dancer: " + profileBlurb() + "\nOpportunity: " + JSON.stringify(g) + "\nWrite the four-line message." }] }]
+      system: D.SYSTEM.pitch + toneNote,
+      contents: [{ role: "user", parts: [{ text: "Dancer: " + profileBlurb() + bioLine + "\nOpportunity: " + JSON.stringify(g) + "\nWrite the four-line message." }] }]
     }).then(function (r) { show(r.text, false); }).catch(function () { show(scripted, true); });
   }
 
@@ -1204,7 +1512,13 @@
       '<label class="field"><span>Agency</span><input id="pf-agency" value="' + esc(p.agency) + '"></label>' +
       '<label class="field"><span>Availability</span><input id="pf-availability" value="' + esc(p.availability) + '"></label>' +
       '<label class="field"><span>Reel link</span><input id="pf-reel" value="' + esc(p.reel) + '" placeholder="https://"></label>' +
+      '<label class="field"><span>Credits (trainings, roles, notable jobs)</span><textarea id="pf-credits" placeholder="One per line, or however you want it">' + esc(p.credits) + "</textarea></label>" +
       '<button class="btn primary wide" id="saveProfileBtn">Save</button>' +
+
+      "<h3>Bio and resume</h3>" +
+      "<p class=\"lede\" style=\"margin-bottom:14px\">Built from your profile and credits above. Save those first for the best draft.</p>" +
+      '<button class="btn wide" id="writeBioBtn">Write my bio</button>' +
+      '<div id="bioSlot"></div>' +
 
       "<h3>Danger zone</h3>" +
       '<button class="btn wide" id="resetAll">Reset everything</button>' +
@@ -1234,17 +1548,85 @@
       np.agency = $("#pf-agency", body).value.trim();
       np.availability = $("#pf-availability", body).value.trim();
       np.reel = $("#pf-reel", body).value.trim();
+      np.credits = $("#pf-credits", body).value.trim();
       saveProfile(np);
       store.set("geminiKey", keyInput.value.trim());
       toast("Saved");
       closeSheet();
       renderers[current]();
     };
+    $("#writeBioBtn", body).onclick = function () { writeBio(body); };
+    renderBioSlot(body);
     $("#resetAll", body).onclick = function () {
       if (!window.confirm("This clears your key, chats, moods, journal and points on this device. Continue?")) return;
       store.wipe();
       location.href = location.pathname;
     };
+  }
+
+  function parseBioJson(text) {
+    var t = String(text).trim().replace(/^```[a-z]*\s*/i, "").replace(/```\s*$/, "").trim();
+    var a = t.indexOf("{"), b = t.lastIndexOf("}");
+    if (a < 0 || b < a) throw new Error("no object");
+    var obj = JSON.parse(t.slice(a, b + 1));
+    if (!obj.bio) throw new Error("no bio");
+    var bullets = (Array.isArray(obj.bullets) ? obj.bullets : []).filter(Boolean).slice(0, 6);
+    if (!bullets.length) throw new Error("no bullets");
+    return { bio: obj.bio, bullets: bullets };
+  }
+
+  function fallbackBio(p) {
+    var styles = (p.styles && p.styles.length) ? p.styles.join(", ") : "contemporary, jazz and commercial";
+    var bio = (p.name || "Gabby") + " is a dancer based in " + (p.city || "Miami, FL") + ", trained in " + styles + "." +
+      (p.height ? " Standing " + p.height + "," : "") +
+      " she brings versatility and reliability to every call, room and rehearsal, always working toward the next opportunity to grow and perform.";
+    var bullets = [
+      "Trained in " + styles + ".",
+      p.height ? "Height: " + p.height + "." : "Consistent, coachable, and quick to pick up choreography.",
+      p.agency ? "Represented by " + p.agency + "." : "Open to representation and submissions.",
+      p.availability ? "Availability: " + p.availability + "." : "Flexible availability for calls and contracts.",
+      p.union ? "Union status: " + p.union + "." : "Comfortable in union and non-union rooms.",
+      p.credits ? p.credits.split("\n")[0] : "Committed to steady training and audition readiness."
+    ];
+    return { bio: bio, bullets: bullets, offline: true };
+  }
+
+  function renderBioSlot(body) {
+    var bio = store.get("bio", null);
+    var slot = $("#bioSlot", body);
+    if (!slot) return;
+    if (!bio) { slot.innerHTML = ""; return; }
+    slot.innerHTML = '<div class="card soft" style="margin-top:12px">' +
+      (bio.offline ? '<p class="meta" style="margin-bottom:8px">Starter draft ' + offlinePill() + "</p>" : "") +
+      "<p style=\"white-space:pre-wrap;margin-bottom:10px\">" + esc(bio.bio) + "</p>" +
+      '<ul class="me-bullets">' + bio.bullets.map(function (b) { return "<li>" + esc(b) + "</li>"; }).join("") + "</ul>" +
+      '<button class="btn small copy-bio-settings">' + ico("i-copy") + "Copy</button></div>";
+    $(".copy-bio-settings", slot).onclick = function () { copy(bio.bio + "\n\n" + bio.bullets.join("\n")); };
+  }
+
+  function writeBio(body) {
+    var btn = $("#writeBioBtn", body);
+    btn.disabled = true;
+    btn.textContent = "Writing...";
+    var p = profile();
+
+    function land(b) {
+      store.set("bio", b);
+      btn.disabled = false;
+      btn.textContent = "Write my bio";
+      renderBioSlot(body);
+    }
+
+    if (!hasKey()) { setTimeout(function () { land(fallbackBio(p)); }, 300); return; }
+
+    gemini({
+      system: D.SYSTEM.bio,
+      contents: [{ role: "user", parts: [{ text: "Dancer: " + profileBlurb() + (p.credits ? " Credits: " + p.credits : "") + "\nWrite the bio and bullets as JSON only." }] }],
+      json: true
+    }).then(function (r) {
+      var parsed = parseBioJson(r.text);
+      land({ bio: parsed.bio, bullets: parsed.bullets, offline: false });
+    }).catch(function () { land(fallbackBio(p)); });
   }
 
   /* ================================================================

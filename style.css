@@ -305,6 +305,21 @@ a.btn{text-decoration:none}
 .links a .ic{width:17px;height:17px;color:var(--grey);flex:0 0 17px}
 .links a:hover{color:var(--blue)}
 
+/* ---------- prep checklist ---------- */
+.checklist{display:flex;flex-direction:column;gap:2px}
+.checkitem{display:flex;align-items:center;gap:12px;min-height:44px;padding:6px 2px;font-size:15px;line-height:1.4}
+.checkitem input{width:22px;height:22px;flex:0 0 22px;accent-color:var(--blue)}
+.checkitem input:checked + span{color:var(--grey);text-decoration:line-through}
+
+/* ---------- me card (bio) ---------- */
+.meCard{padding:14px 18px}
+.me-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;min-height:44px;font-family:"Fraunces",Georgia,serif;font-size:17px;font-weight:600;color:var(--deep)}
+.me-toggle .ic{width:20px;height:20px;color:var(--deep);transition:transform .2s ease}
+.me-toggle[aria-expanded="true"] .ic{transform:rotate(180deg)}
+.me-body{margin-top:12px}
+.me-bullets{margin:0 0 14px;padding-left:18px;color:var(--ink);font-size:14px;line-height:1.6}
+.me-bullets li{margin-bottom:4px}
+
 /* ---------- sub tabs ---------- */
 .subtabs{display:flex;gap:6px;background:var(--mist);padding:4px;border-radius:var(--r-pill)}
 .subtab{flex:1;min-height:44px;border-radius:var(--r-pill);font-size:14px;font-weight:800;color:var(--grey)}
