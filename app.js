@@ -105,6 +105,7 @@
     var body = { contents: opts.contents };
     if (opts.system) body.systemInstruction = { parts: [{ text: opts.system }] };
     if (opts.tools) body.tools = opts.tools;
+    if (opts.json) body.generationConfig = { responseMimeType: "application/json" };
     return fetch(ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": key },
@@ -390,8 +391,12 @@
 
     var req = { system: D.SYSTEM.gigs, contents: [{ role: "user", parts: [{ text: ask }] }] };
     gemini(Object.assign({ tools: [{ google_search: {} }] }, req)).catch(function () {
-      // grounding is quota-limited on free keys; retry from the model's own knowledge
-      return gemini(req);
+      // grounding is quota-limited on free keys; retry from the model's own knowledge, no tool talk
+      return gemini({
+        system: D.SYSTEM.gigs.replace("Use search to ground every item in", "Draw on what you know to ground every item in"),
+        contents: req.contents,
+        json: true
+      });
     }).then(function (res) {
       var arr = parseGigJson(res.text);
       var chunks = (res.grounding && res.grounding.groundingChunks) || [];
