@@ -1,5 +1,5 @@
-/* Bluebird service worker - cache-first app shell, network-first everything else. */
-var CACHE = "bluebird-shell-v1";
+/* Bluebird service worker - network-first app shell with offline cache, network-first everything else. */
+var CACHE = "bluebird-shell-v2";
 var SHELL = [
   "./",
   "./index.html",
@@ -41,17 +41,18 @@ self.addEventListener("fetch", function (e) {
   var url = e.request.url;
 
   if (e.request.mode === "navigate" || isShellRequest(url)) {
-    // cache-first for the app shell
+    // network-first for the app shell so every push reaches her; cache is the offline fallback
     e.respondWith(
-      caches.match(e.request).then(function (hit) {
-        if (hit) return hit;
-        return fetch(e.request).then(function (res) {
-          if (res && res.ok) {
-            var copy = res.clone();
-            caches.open(CACHE).then(function (c) { c.put(e.request, copy); });
-          }
-          return res;
-        }).catch(function () { return hit; });
+      fetch(e.request).then(function (res) {
+        if (res && res.ok) {
+          var copy = res.clone();
+          caches.open(CACHE).then(function (c) { c.put(e.request, copy); });
+        }
+        return res;
+      }).catch(function () {
+        return caches.match(e.request).then(function (hit) {
+          return hit || (e.request.mode === "navigate" ? caches.match("./index.html") : undefined);
+        });
       })
     );
     return;
