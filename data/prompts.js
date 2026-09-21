@@ -64,6 +64,22 @@
       "bio is a third-person bio of about 60 words, warm but professional, built only from facts given,",
       "never invented credits or companies. bullets is exactly six short resume bullet points a dancer",
       "could paste straight into an application, built the same way. No emojis, no exclamation points."
+    ].join(" "),
+
+    sunday: [
+      "Your name is Theo. Today is Sunday, so instead of a short daily note you are writing her a longer",
+      "'Sunday letter': 5 to 8 sentences, warm and specific, looking back at her week and looking forward.",
+      "Use anything you remember about her and anything about her recent moods if given, but never invent",
+      "specifics you were not told. Write directly to her, second person, like a letter. No emojis,",
+      "no markdown, no headers. Sign off with just 'Theo' on its own line at the end."
+    ].join(" "),
+
+    weekly: [
+      "You are Quiet Room, reflecting back one calm week to a dancer, from her mood check-ins, journal",
+      "entries and small logged wins over the last 7 days. Write exactly 5 short lines, no headers, no",
+      "numbering, no emojis. Notice a pattern, name one thing that went well, name one thing that was hard,",
+      "and end with one gentle, specific thought for the week ahead. Never diagnose, never give medical advice.",
+      "Base everything only on what you were given, never invent specifics."
     ].join(" ")
   };
 
@@ -300,6 +316,35 @@
 
   var CRISIS_WORDS = ["suicide", "suicidal", "kill myself", "killing myself", "end my life", "self-harm", "self harm", "hurt myself", "hurting myself", "cut myself", "don't want to be here", "dont want to be here", "want to die", "better off dead"];
 
+  /* ---- Streak milestone cards, keyed by the day count that unlocks them ---- */
+  var STREAK_CARDS = {
+    3: ["Three days in a row, {name}. That is a habit starting to take shape, not luck.",
+        "Three days back to back. Small and steady is exactly how this is supposed to feel."],
+    7: ["A full week, {name}. Seven days of showing up for yourself, on purpose.",
+        "One week straight. That is not nothing, that is a pattern."],
+    14: ["Two weeks. You have built something here, {name}, even on the days it did not feel like it.",
+         "Fourteen days running. Whatever else is going on, this part is working."],
+    30: ["Thirty days, {name}. A full month of coming back. I hope you feel how rare that is.",
+         "One month straight. I am genuinely proud of you for this one."]
+  };
+
+  /* ---- Practice mode category chips: label -> tag (null = All) ---- */
+  var TRIVIA_CATEGORIES = [
+    { key: "all", label: "All", tag: null },
+    { key: "ballet", label: "Ballet", tag: "ballet" },
+    { key: "musicals", label: "Musicals", tag: "musicals" },
+    { key: "pop", label: "Pop", tag: "pop" },
+    { key: "miami", label: "Miami", tag: "miami" },
+    { key: "anatomy", label: "Anatomy", tag: "anatomy" }
+  ];
+
+  var TRIVIA_LEVELS = [
+    { key: "all", label: "All levels", level: null },
+    { key: "1", label: "Easy", level: 1 },
+    { key: "2", label: "Medium", level: 2 },
+    { key: "3", label: "Hard", level: 3 }
+  ];
+
   window.BB_DATA = {
     SYSTEM: SYSTEM,
     GIGS_FALLBACK: GIGS_FALLBACK,
@@ -313,6 +358,9 @@
     MINI_TRIVIA: MINI_TRIVIA,
     STYLES: STYLES,
     MOODS: MOODS,
-    CRISIS_WORDS: CRISIS_WORDS
+    CRISIS_WORDS: CRISIS_WORDS,
+    STREAK_CARDS: STREAK_CARDS,
+    TRIVIA_CATEGORIES: TRIVIA_CATEGORIES,
+    TRIVIA_LEVELS: TRIVIA_LEVELS
   };
 })();

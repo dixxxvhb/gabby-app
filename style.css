@@ -391,6 +391,21 @@ a.btn{text-decoration:none}
   animation:fade .18s ease;
 }
 
+/* ---------- confetti (blue palette, no sound, ~1.5s) ---------- */
+.confetti-wrap{position:fixed;inset:0;pointer-events:none;z-index:80;overflow:hidden}
+.confetti-wrap i{
+  position:absolute;top:-12px;width:8px;height:14px;border-radius:2px;
+  opacity:.95;animation:confetti-fall 1.5s ease-in forwards;
+}
+@keyframes confetti-fall{
+  0%{transform:translateY(0) rotate(0deg);opacity:1}
+  100%{transform:translateY(112vh) rotate(340deg);opacity:0}
+}
+@media (prefers-reduced-motion:reduce){.confetti-wrap{display:none}}
+
+/* ---------- wins jar ---------- */
+.winsjar .win-chip{cursor:pointer}
+
 /* ---------- desktop ---------- */
 @media (min-width:900px){
   body{padding-bottom:0;display:grid;grid-template-columns:232px 1fr;grid-template-rows:auto 1fr;min-height:100vh}

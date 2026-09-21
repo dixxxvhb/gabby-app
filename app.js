@@ -4,7 +4,7 @@
 
   var D = window.BB_DATA;
   var NS = "bluebird.";
-  var VERSION = "2.1";
+  var VERSION = "3.0";
   var MODEL = "gemini-3.6-flash";
   var ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/" + MODEL + ":generateContent";
 
@@ -816,7 +816,47 @@
     var noteKept = store.get("noteKept", {});
     var note = dailyNote();
 
-    if (theoState.drawer) {
+    if (theoState.drawer === "memory") {
+      var mem = store.get("theoMemory", []);
+      v.innerHTML = '<div class="stack">' +
+        '<div class="card-row" style="margin-top:0"><button class="btn small ghost" id="backTheo">' + ico("i-back") + "Back</button></div>" +
+        '<h2 class="section-title">What Theo knows</h2>' +
+        (mem.length
+          ? '<div class="stack">' + mem.map(function (line, i) {
+              return '<article class="card soft" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px">' +
+                '<p style="margin:0;flex:1">' + esc(line) + '</p>' +
+                '<button class="btn small ghost drop-mem" data-i="' + i + '" aria-label="Forget this">' + ico("i-close") + "</button></article>";
+            }).join("") + "</div>"
+          : '<p class="empty">Theo has not kept anything yet. Tell it something below and it will remember.</p>') +
+        '<div class="composer" style="position:static;background:none;padding:0">' +
+        '<textarea id="memInput" rows="1" placeholder="Tell Theo something to remember"></textarea>' +
+        '<button class="send" id="memSend" aria-label="Save">' + ico("i-check") + "</button></div>" +
+        "</div>";
+      $("#backTheo", v).onclick = function () { theoState.drawer = false; renderTheo(); };
+      $$(".drop-mem", v).forEach(function (b) {
+        b.onclick = function () {
+          var list = store.get("theoMemory", []);
+          list.splice(+b.dataset.i, 1);
+          store.set("theoMemory", list);
+          renderTheo();
+        };
+      });
+      function addMem() {
+        var box = $("#memInput", v);
+        var text = box.value.trim();
+        if (!text) return;
+        var list = store.get("theoMemory", []);
+        if (list.indexOf(text) < 0) list.push(text);
+        store.set("theoMemory", list.slice(-40));
+        toast("Theo will remember that");
+        renderTheo();
+      }
+      $("#memSend", v).onclick = addMem;
+      $("#memInput", v).onkeydown = function (e) { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addMem(); } };
+      return;
+    }
+
+    if (theoState.drawer === "keeps") {
       v.innerHTML = '<div class="stack">' +
         '<div class="card-row" style="margin-top:0"><button class="btn small ghost" id="backTheo">' + ico("i-back") + "Back</button></div>" +
         '<h2 class="section-title">Keepsakes</h2>' +
@@ -848,11 +888,18 @@
         ico(speakOn ? "i-speaker" : "i-speaker-off") + (speakOn ? "Theo reads aloud" : "Theo reads aloud: off") +
         "</button></div>";
     }
+    var isSunday = new Date().getDay() === 0;
+    var sundayLetters = store.get("sundayLetter", {});
+    var sundayText = isSunday ? sundayLetters[today()] : null;
+    var noteLabel = isSunday ? "Your Sunday letter, from Theo" : "Today, from Theo";
+    var noteBody = isSunday ? (sundayText || "Writing your Sunday letter...") : note;
+
     html += '<article class="card baby">' +
-      '<p class="meta" style="margin-bottom:6px">Today, from Theo</p>' +
-      '<p style="margin:0;font-family:Fraunces,Georgia,serif;font-size:19px;line-height:1.45;color:var(--deep)">' + esc(note) + "</p>" +
+      '<p class="meta" style="margin-bottom:6px">' + esc(noteLabel) + "</p>" +
+      '<p style="margin:0;font-family:Fraunces,Georgia,serif;font-size:19px;line-height:1.45;color:var(--deep);white-space:pre-wrap">' + esc(noteBody) + "</p>" +
       '<div class="card-row"><button class="btn small" id="keepNote">' + ico("i-heart") + (noteKept[today()] ? "Kept" : "Keep this") + "</button>" +
-      '<button class="btn small ghost" id="openKeeps">Keepsakes (' + keeps.length + ")</button></div>" +
+      '<button class="btn small ghost" id="openKeeps">Keepsakes (' + keeps.length + ")</button>" +
+      '<button class="btn small ghost" id="openMemory">' + ico("i-book") + "What Theo knows</button></div>" +
       "</article>";
 
     html += '<div class="thread" id="theoThread">';
@@ -894,17 +941,18 @@
     }
     if (canListen) wireMic($("#theoMic", v), $("#theoInput", v), sendTheo);
 
-    $("#openKeeps", v).onclick = function () { theoState.drawer = true; renderTheo(); };
+    $("#openKeeps", v).onclick = function () { theoState.drawer = "keeps"; renderTheo(); };
+    $("#openMemory", v).onclick = function () { theoState.drawer = "memory"; renderTheo(); };
     $("#keepNote", v).onclick = function () {
       var nk = store.get("noteKept", {});
       var keeps2 = store.get("keepsakes", []);
       if (nk[today()]) {
         delete nk[today()];
-        keeps2 = keeps2.filter(function (k) { return k.text !== note; });
+        keeps2 = keeps2.filter(function (k) { return k.text !== noteBody; });
         toast("Removed");
       } else {
         nk[today()] = true;
-        keeps2.push({ text: note, date: today() });
+        keeps2.push({ text: noteBody, date: today() });
         toast("Kept");
       }
       store.set("noteKept", nk);
@@ -937,6 +985,39 @@
     var focusables = $$("#theoInput", v);
     focusables.forEach(function (el) { el.addEventListener("focus", function () { setTimeout(scrollThread, 300); }); });
     scrollThread();
+
+    if (isSunday && !sundayText) fetchSundayLetter();
+  }
+
+  function fallbackSundayLetter() {
+    var m = moods().slice(-7);
+    var bit = m.length
+      ? "I noticed your week had some " + m.map(function (x) { return x.mood; }).join(", ") + " days in it. All of it counts."
+      : "I do not have much logged from this week, and that is fine too.";
+    return "Sunday, " + firstName() + ".\n\nAnother week down. " + bit + " Whatever this week asked of you, you showed up for most of it, and that is the only scoreboard that matters.\n\nTake something slow today if you can. Next week will still be there tomorrow.\n\nTheo";
+  }
+
+  function fetchSundayLetter() {
+    var d8 = today();
+    var mem = store.get("theoMemory", []);
+    var recentMoods = moods().slice(-7).map(function (x) { return x.date + ": " + x.mood + (x.note ? " (" + x.note + ")" : ""); }).join("; ");
+
+    function land(text) {
+      var letters = store.get("sundayLetter", {});
+      letters[d8] = text;
+      store.set("sundayLetter", letters);
+      if (theoState.drawer === false || theoState.drawer === undefined) renderTheo();
+    }
+
+    if (!hasKey()) { land(fallbackSundayLetter()); return; }
+
+    var sys = D.SYSTEM.sunday + "\nAbout her: " + profileBlurb() +
+      (mem.length ? "\nThings you remember: " + mem.join("; ") : "") +
+      (recentMoods ? "\nHer mood check-ins this week: " + recentMoods : "");
+
+    gemini({ system: sys, contents: [{ role: "user", parts: [{ text: "Write today's Sunday letter." }] }] })
+      .then(function (r) { land(r.text); })
+      .catch(function () { land(fallbackSundayLetter()); });
   }
 
   function wireLongPress(thread) {
@@ -1084,6 +1165,7 @@
     var v = $("#view-quiet");
 
     if (quietState.view === "journal") { renderJournal(v); return; }
+    if (quietState.view === "weekly") { renderWeekly(v); return; }
 
     var m = moods();
     var todayMood = null;
@@ -1112,6 +1194,20 @@
       '<div style="margin-top:18px">' + moodStrip() +
       '<p class="meta" style="margin:8px 0 0">Last 14 days</p></div>' +
       "</div>";
+
+    var wins = store.get("wins", []);
+    html += '<article class="card soft winsjar">' +
+      '<h2 class="section-title" style="margin-bottom:10px">Wins jar</h2>' +
+      '<div class="composer" style="position:static;background:none;padding:0 0 12px">' +
+      '<input id="winInput" placeholder="Drop a win, one line" style="flex:1;min-height:46px;padding:11px 15px;border-radius:23px;border:1px solid rgba(74,120,168,.22);background:var(--white)">' +
+      '<button class="send" id="winAdd" aria-label="Add win">' + ico("i-check") + "</button></div>" +
+      (wins.length
+        ? '<div class="chips">' + wins.slice(-16).reverse().map(function (w, i) {
+            return '<button class="chip win-chip" data-i="' + (wins.length - 1 - i) + '" aria-label="Remove this win">' + esc(w.text) + "</button>";
+          }).join("") + "</div>"
+        : '<p class="empty">Drop something small that went right today. It counts.</p>') +
+      '<div class="card-row"><button class="btn small ghost" id="weeklyBtn">' + ico("i-book") + "This week</button></div>" +
+      "</article>";
 
     html += '<div class="thread" id="quietThread">';
     if (!chat.length) {
@@ -1143,6 +1239,27 @@
     if (canListenQ) wireMic($("#quietMic", v), $("#quietInput", v), sendQuiet);
 
     $("#openJournal", v).onclick = function () { quietState.view = "journal"; renderQuiet(); };
+    $("#weeklyBtn", v).onclick = function () { quietState.view = "weekly"; renderQuiet(); };
+    $("#winAdd", v).onclick = function () {
+      var box = $("#winInput", v);
+      var text = box.value.trim();
+      if (!text) return;
+      var list = store.get("wins", []);
+      list.push({ date: today(), text: text });
+      store.set("wins", list.slice(-200));
+      toast("Dropped in the jar");
+      renderQuiet();
+    };
+    var winBox = $("#winInput", v);
+    winBox.onkeydown = function (e) { if (e.key === "Enter") { e.preventDefault(); $("#winAdd", v).click(); } };
+    $$(".win-chip", v).forEach(function (chip) {
+      chip.onclick = function () {
+        var list = store.get("wins", []);
+        list.splice(+chip.dataset.i, 1);
+        store.set("wins", list);
+        renderQuiet();
+      };
+    });
     $$("#moodRow .mood", v).forEach(function (b) {
       b.onclick = function () {
         var list = moods().filter(function (x) { return x.date !== today(); });
@@ -1206,6 +1323,65 @@
       .catch(function () { setTimeout(function () { land(scriptedQuiet(text), true); }, 500); });
   }
 
+  function lastNDays(n) {
+    var out = [];
+    for (var i = n - 1; i >= 0; i--) out.push(dayOffset(-i));
+    return out;
+  }
+
+  function fallbackWeekly() {
+    var days = lastNDays(7);
+    var m = moods().filter(function (x) { return days.indexOf(x.date) >= 0; });
+    var j = store.get("journal", {});
+    var jCount = days.filter(function (d) { return j[d] && j[d].trim(); }).length;
+    var w = store.get("wins", []).filter(function (x) { return days.indexOf(x.date) >= 0; });
+    var lines = [];
+    lines.push(m.length ? "You checked in " + m.length + " of the last 7 days." : "You did not log a mood this week, and that is okay.");
+    lines.push(jCount ? "You wrote in your journal " + jCount + " time" + (jCount === 1 ? "" : "s") + "." : "No journal entries this week.");
+    lines.push(w.length ? "You dropped " + w.length + " win" + (w.length === 1 ? "" : "s") + " in the jar, including: " + w[w.length - 1].text + "." : "No wins logged, but a quiet week still counts.");
+    lines.push("Whatever showed up, you kept coming back to check in with yourself.");
+    lines.push("Next week, try naming one small thing before you close the app each night.");
+    return lines.join("\n");
+  }
+
+  function renderWeekly(v) {
+    var cached = store.get("weeklyReflection", {});
+    var cachedThisWeek = cached.date === today() ? cached.text : null;
+    var html = '<div class="stack">' +
+      '<div class="card-row" style="margin-top:0"><button class="btn small ghost" id="backQuiet">' + ico("i-back") + "Back</button></div>" +
+      '<h2 class="section-title">This week</h2>' +
+      '<article class="card soft" id="weeklySlot">' +
+      (cachedThisWeek
+        ? '<p style="margin:0;white-space:pre-wrap;line-height:1.6">' + esc(cachedThisWeek) + "</p>"
+        : '<p class="meta">A short reflection built from your last 7 days of moods, journal entries and wins.</p>' +
+          '<div class="card-row"><button class="btn primary" id="buildWeekly">Build my reflection</button></div>') +
+      "</article></div>";
+    v.innerHTML = html;
+    $("#backQuiet", v).onclick = function () { quietState.view = "room"; renderQuiet(); };
+    var buildBtn = $("#buildWeekly", v);
+    if (buildBtn) buildBtn.onclick = function () {
+      buildBtn.disabled = true;
+      buildBtn.textContent = "Writing...";
+      var days = lastNDays(7);
+      var m = moods().filter(function (x) { return days.indexOf(x.date) >= 0; }).map(function (x) { return x.date + ": " + x.mood; }).join("; ");
+      var j = store.get("journal", {});
+      var jTexts = days.filter(function (d) { return j[d] && j[d].trim(); }).map(function (d) { return j[d]; }).join(" / ");
+      var w = store.get("wins", []).filter(function (x) { return days.indexOf(x.date) >= 0; }).map(function (x) { return x.text; }).join("; ");
+
+      function land(text) {
+        store.set("weeklyReflection", { date: today(), text: text });
+        renderWeekly(v);
+      }
+
+      if (!hasKey()) { setTimeout(function () { land(fallbackWeekly()); }, 400); return; }
+
+      gemini({
+        system: D.SYSTEM.weekly,
+        contents: [{ role: "user", parts: [{ text: "Mood check-ins: " + (m || "none logged") + "\nJournal snippets: " + (jTexts || "none") + "\nWins logged: " + (w || "none") + "\nWrite the 5-line reflection." }] }]
+      }).then(function (r) { land(r.text); }).catch(function () { land(fallbackWeekly()); });
+    };
+  }
+
   function renderJournal(v) {
     var entries = store.get("journal", {});
     var dates = Object.keys(entries).sort().reverse();
@@ -1244,7 +1420,14 @@
      TAB 4 - DAILY
      ================================================================ */
   var BANK = null;
-  var dailyState = { mode: "home", idx: 0, picked: null, remaining: 15, timer: null, questions: [], opened: null };
+  var dailyState = {
+    mode: "home", idx: 0, picked: null, remaining: 15, timer: null, questions: [], opened: null,
+    correct: 0, filter: { tag: null, level: null }, practicePool: null, milestone: null
+  };
+
+  function theoScoreToday() {
+    return 380 + (hash("theoscore" + today()) % 141);
+  }
 
   function loadBank() {
     if (BANK) return Promise.resolve(BANK);
@@ -1309,6 +1492,8 @@
 
   function paintDaily(v, bank) {
     applyUnlocks();
+    if (dailyState.milestone) { paintMilestone(v); return; }
+    if (dailyState.mode === "practiceSetup") { paintPracticeSetup(v, bank); return; }
     if (dailyState.mode === "quiz" || dailyState.mode === "practice") { paintQuiz(v); return; }
     if (dailyState.opened) { paintReward(v); return; }
 
@@ -1317,6 +1502,8 @@
     var rec = todayRecord();
     var chal = dailyChallenge();
     var chalDone = store.get("challengeDone", {})[today()];
+    var theoScore = theoScoreToday();
+    var beatTheo = rec && rec.score > theoScore;
 
     var html = '<div class="stack">';
     html += '<div class="scorebar">' +
@@ -1328,6 +1515,7 @@
     html += '<article class="card">' +
       "<h3>Daily Five</h3>" +
       "<p class=\"meta\">" + (rec ? "Done today. You scored " + rec.score + " points." : "Five questions, fresh every day. Answer fast for the bonus.") + "</p>" +
+      '<p class="meta" style="margin-top:8px">Theo\'s score today: ' + theoScore + (beatTheo ? '<span class="pill good" style="margin-left:8px">Beat Theo</span>' : "") + "</p>" +
       '<div class="card-row">' +
       '<button class="btn primary" id="startDaily">' + (rec ? "Play again for fun" : "Start") + "</button>" +
       '<button class="btn ghost" id="startPractice">Practice mode</button>' +
@@ -1355,13 +1543,11 @@
     $("#startDaily", v).onclick = function () {
       dailyState.mode = "quiz";
       dailyState.questions = dailyQuestions(bank);
-      dailyState.idx = 0; dailyState.picked = null; dailyState.score = 0;
+      dailyState.idx = 0; dailyState.picked = null; dailyState.score = 0; dailyState.correct = 0;
       renderDaily();
     };
     $("#startPractice", v).onclick = function () {
-      dailyState.mode = "practice";
-      dailyState.questions = [bank[Math.floor(Math.random() * bank.length)]];
-      dailyState.idx = 0; dailyState.picked = null; dailyState.score = 0;
+      dailyState.mode = "practiceSetup";
       renderDaily();
     };
     $("#chalBox", v).onclick = function () {
@@ -1388,6 +1574,89 @@
       '<article class="card baby"><h3>' + esc(r.name) + "</h3>" +
       '<p style="margin:0;white-space:pre-wrap;line-height:1.65">' + esc(r.body) + "</p></article></div>";
     $("#backDaily", v).onclick = function () { dailyState.opened = null; renderDaily(); };
+  }
+
+  function filterPool(bank, filter) {
+    return bank.filter(function (q) {
+      if (filter.tag && q.tag !== filter.tag) return false;
+      if (filter.level && q.level !== filter.level) return false;
+      return true;
+    });
+  }
+
+  function paintPracticeSetup(v, bank) {
+    var filter = dailyState.filter;
+    var pool = filterPool(bank, filter);
+    var html = '<div class="stack">' +
+      '<div class="card-row" style="margin-top:0"><button class="btn small ghost" id="backDaily">' + ico("i-back") + "Back</button></div>" +
+      '<h2 class="section-title">Practice</h2>' +
+      '<div class="chips" id="catChips">' +
+      D.TRIVIA_CATEGORIES.map(function (c) {
+        var pressed = c.key === "all" ? !filter.tag : filter.tag === c.tag;
+        return '<button class="chip" data-tag="' + c.key + '" aria-pressed="' + pressed + '">' + esc(c.label) + "</button>";
+      }).join("") + "</div>" +
+      '<div class="chips" id="levelChips">' +
+      D.TRIVIA_LEVELS.map(function (l) {
+        return '<button class="chip" data-level="' + l.key + '" aria-pressed="' + (l.key === "all" ? !filter.level : filter.level === l.level) + '">' + esc(l.label) + "</button>";
+      }).join("") + "</div>" +
+      '<article class="card soft"><p class="meta">' + pool.length + " question" + (pool.length === 1 ? "" : "s") + " match this pick.</p>" +
+      '<div class="card-row"><button class="btn primary wide" id="beginPractice"' + (pool.length ? "" : " disabled") + ">Start practice</button></div></article>" +
+      "</div>";
+    v.innerHTML = html;
+
+    $("#backDaily", v).onclick = function () { dailyState.mode = "home"; renderDaily(); };
+    $$("#catChips .chip", v).forEach(function (b) {
+      b.onclick = function () {
+        var c = D.TRIVIA_CATEGORIES.filter(function (x) { return x.key === b.dataset.tag; })[0];
+        dailyState.filter.tag = c.tag;
+        renderDaily();
+      };
+    });
+    $$("#levelChips .chip", v).forEach(function (b) {
+      b.onclick = function () {
+        var l = D.TRIVIA_LEVELS.filter(function (x) { return x.key === b.dataset.level; })[0];
+        dailyState.filter.level = l.level;
+        renderDaily();
+      };
+    });
+    $("#beginPractice", v).onclick = function () {
+      if (!pool.length) return;
+      dailyState.practicePool = pool;
+      dailyState.mode = "practice";
+      dailyState.questions = [pool[Math.floor(Math.random() * pool.length)]];
+      dailyState.idx = 0; dailyState.picked = null; dailyState.score = 0;
+      renderDaily();
+    };
+  }
+
+  var STREAK_MILESTONES = [3, 7, 14, 30];
+  function paintMilestone(v) {
+    var count = dailyState.milestone;
+    var lines = D.STREAK_CARDS[count] || [];
+    var text = lines.length ? lines[hash("mstone" + today()) % lines.length].replace(/\{name\}/g, firstName()) : "Streak milestone.";
+    v.innerHTML = '<div class="stack">' +
+      '<article class="card baby" style="text-align:center;padding:32px 22px">' +
+      '<p class="meta" style="margin-bottom:10px">' + count + " day streak, from Theo</p>" +
+      '<p style="margin:0;font-family:Fraunces,Georgia,serif;font-size:21px;line-height:1.5;color:var(--deep)">' + esc(text) + "</p>" +
+      '<div class="card-row" style="justify-content:center"><button class="btn primary" id="closeMilestone">Keep going</button></div>' +
+      "</article></div>";
+    $("#closeMilestone", v).onclick = function () { dailyState.milestone = null; renderDaily(); };
+  }
+
+  function confettiBurst() {
+    var wrap = document.createElement("div");
+    wrap.className = "confetti-wrap";
+    var colors = ["#4A78A8", "#BFE3F5", "#DCEFFB", "#FFFFFF"];
+    for (var i = 0; i < 40; i++) {
+      var piece = document.createElement("i");
+      piece.style.left = Math.random() * 100 + "%";
+      piece.style.background = colors[i % colors.length];
+      piece.style.animationDelay = (Math.random() * 0.4) + "s";
+      piece.style.animationDuration = (1.1 + Math.random() * 0.5) + "s";
+      wrap.appendChild(piece);
+    }
+    document.body.appendChild(wrap);
+    setTimeout(function () { wrap.remove(); }, 1900);
   }
 
   function stopTimer() { if (dailyState.timer) { clearInterval(dailyState.timer); dailyState.timer = null; } }
@@ -1436,7 +1705,11 @@
         var gained = 0;
         if (right) {
           gained = 100 + Math.max(0, Math.round((dailyState.remaining / 15) * 100));
-          if (!practice) { dailyState.score = (dailyState.score || 0) + gained; addPoints(gained); }
+          if (!practice) {
+            dailyState.score = (dailyState.score || 0) + gained;
+            dailyState.correct = (dailyState.correct || 0) + 1;
+            addPoints(gained);
+          }
         }
         $("#reveal", v).innerHTML =
           '<p class="fact">' + (right ? "Correct. +" + gained + (practice ? " (practice)" : " points") : "The answer was " + esc(q.choices[q.answer]) + ".") + "</p>" +
@@ -1444,7 +1717,8 @@
           '<button class="btn primary wide" id="nextQ" style="margin-top:14px">' + (practice ? "Another" : (dailyState.idx === 4 ? "Finish" : "Next")) + "</button>";
         $("#nextQ", v).onclick = function () {
           if (practice) {
-            dailyState.questions = [BANK[Math.floor(Math.random() * BANK.length)]];
+            var pool = dailyState.practicePool && dailyState.practicePool.length ? dailyState.practicePool : BANK;
+            dailyState.questions = [pool[Math.floor(Math.random() * pool.length)]];
             dailyState.idx = 0;
           } else {
             dailyState.idx++;
@@ -1458,18 +1732,33 @@
   function finishQuiz(v) {
     stopTimer();
     var score = dailyState.score || 0;
+    var perfect = (dailyState.correct || 0) >= 5;
     var rec = todayRecord();
-    if (!rec) {
+    var justFinished = !rec;
+    if (justFinished) {
       store.set("dailyRun", { date: today(), score: score });
-      markStreak();
+      var prevCount = streak().count;
+      var s2 = markStreak();
+      if (STREAK_MILESTONES.indexOf(s2.count) >= 0 && s2.count !== prevCount) {
+        var shown = store.get("milestoneShown", {});
+        if (!shown[today()]) {
+          shown[today()] = s2.count;
+          store.set("milestoneShown", shown);
+          dailyState.milestone = s2.count;
+        }
+      }
     }
     dailyState.mode = "home";
     var s = streak();
+    var theoScore = theoScoreToday();
+    var beatTheo = score > theoScore;
     v.innerHTML = '<div class="stack">' +
       '<article class="card baby"><h3>Daily Five done</h3>' +
       "<p>You banked " + score + " points today. Streak is " + s.count + (s.count === 1 ? " day." : " days.") + "</p>" +
+      (beatTheo ? '<p class="meta">You scored ' + score + " to Theo's " + theoScore + '. <span class="pill good">Beat Theo</span></p>' : "") +
       '<div class="card-row"><button class="btn primary" id="backHome">Back to Daily</button></div></article></div>';
     $("#backHome", v).onclick = function () { renderDaily(); };
+    if (justFinished && perfect) confettiBurst();
   }
 
   renderers.daily = renderDaily;

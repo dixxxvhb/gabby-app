@@ -1,0 +1,53 @@
+{
+  "round": 3,
+  "syntaxGate": {
+    "app.js": "pass",
+    "data/prompts.js": "pass",
+    "modules/pwa.js": "pass",
+    "modules/voice.js": "pass",
+    "modules/ics.js": "pass",
+    "scripts/verify-trivia.js": "pass"
+  },
+  "triviaVerification": {
+    "script": "scripts/verify-trivia.js",
+    "total": 400,
+    "categoryCounts": { "dance": 240, "general": 160 },
+    "uniqueIds": true,
+    "uniqueQuestionText": true,
+    "fourDistinctChoices": true,
+    "answerIndexInRange": true,
+    "pass": true
+  },
+  "features": {
+    "triviaBankTo400": true,
+    "categoryPickerChips": true,
+    "difficultyChips": true,
+    "levelFieldOnAllQuestions": true,
+    "tagFieldOnKeywordMatchedQuestions": true,
+    "blueConfettiOnPerfectDailyFive": true,
+    "streakMilestoneCards_3_7_14_30": true,
+    "rivalModeTheoScoreLine": true,
+    "beatTheoPill": true,
+    "theoMemoryDrawer": true,
+    "manualMemoryAdd": true,
+    "sundayLetter": true,
+    "quietRoomWinsJar": true,
+    "quietRoomWeeklyReflection": true,
+    "crisisWordGuardUntouched": true
+  },
+  "phoneRules": {
+    "targetsAtLeast44px": true,
+    "inputFontSize16px": true,
+    "noHoverOnlyAffordances": true,
+    "noHorizontalScrollAt390": true
+  },
+  "screenshots": [
+    "docs/shots/v2/round3-daily-rival.png",
+    "docs/shots/v2/round3-practice-filters.png",
+    "docs/shots/v2/round3-theo-sunday.png",
+    "docs/shots/v2/round3-theo-memory.png",
+    "docs/shots/v2/round3-quiet-wins.png",
+    "docs/shots/v2/round3-quiet-weekly.png",
+    "docs/shots/v2/round3-streak-milestone.png"
+  ]
+}
