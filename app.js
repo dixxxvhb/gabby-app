@@ -4,6 +4,7 @@
 
   var D = window.BB_DATA;
   var NS = "bluebird.";
+  var VERSION = "2.0";
   var MODEL = "gemini-3.6-flash";
   var ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/" + MODEL + ":generateContent";
 
@@ -153,6 +154,31 @@
   }
 
   function offlinePill() { return '<span class="pill">offline</span>'; }
+
+  /* shared mic wiring: tap to start, interim fills box, final sends on tap again or 1.5s silence */
+  function wireMic(btn, box, sendFn) {
+    if (!btn || !box || !window.BB_VOICE || !window.BB_VOICE.canListen()) { if (btn) btn.hidden = true; return; }
+    var listener = null;
+    var active = false;
+    btn.onclick = function () {
+      if (active) {
+        if (listener) listener.stop();
+        return;
+      }
+      active = true;
+      btn.classList.add("listening");
+      listener = window.BB_VOICE.makeListener({
+        onInterim: function (text) { box.value = text; },
+        onEnd: function (finalText) {
+          active = false;
+          btn.classList.remove("listening");
+          var text = (finalText || box.value || "").trim();
+          if (text) sendFn(text);
+        }
+      });
+      listener.start();
+    };
+  }
 
   /* ============ router ============ */
   var TABS = ["gigs", "theo", "quiet", "daily"];
@@ -453,7 +479,9 @@
   /* ================================================================
      TAB 2 - THEO
      ================================================================ */
-  var theoState = { typing: false, drawer: false, offline: false };
+  var theoState = { typing: false, drawer: false, offline: false, listening: false };
+
+  function voiceOn(key) { return !!store.get(key, false); }
 
   function theoChat() { return store.get("theoChat", []); }
   function setTheoChat(v) { store.set("theoChat", v.slice(-120)); }
@@ -503,7 +531,15 @@
       return;
     }
 
+    var speakOn = voiceOn("theoVoice");
+    var canSpeak = window.BB_VOICE && window.BB_VOICE.canSpeak();
     var html = '<div class="stack chat-view">';
+    if (canSpeak) {
+      html += '<div class="card-row" style="margin-top:0;justify-content:flex-end">' +
+        '<button class="btn small ghost" id="theoVoiceToggle" aria-pressed="' + speakOn + '">' +
+        ico(speakOn ? "i-speaker" : "i-speaker-off") + (speakOn ? "Theo reads aloud" : "Theo reads aloud: off") +
+        "</button></div>";
+    }
     html += '<article class="card baby">' +
       '<p class="meta" style="margin-bottom:6px">Today, from Theo</p>' +
       '<p style="margin:0;font-family:Fraunces,Georgia,serif;font-size:19px;line-height:1.45;color:var(--deep)">' + esc(note) + "</p>" +
@@ -517,7 +553,12 @@
     }
     chat.forEach(function (m, i) {
       var kept = keeps.some(function (k) { return k.text === m.text; });
-      html += '<div class="bubble ' + (m.role === "me" ? "me" : "them warm") + (kept ? " saved" : "") + '" data-i="' + i + '">' + esc(m.text) + "</div>";
+      if (m.role === "me") {
+        html += '<div class="bubble me" data-i="' + i + '">' + esc(m.text) + "</div>";
+      } else {
+        html += '<div class="bubble-row"><div class="bubble them warm' + (kept ? " saved" : "") + '" data-i="' + i + '">' + esc(m.text) + "</div>" +
+          '<button class="keep-btn' + (kept ? " on" : "") + '" data-i="' + i + '" aria-label="Keep this message">' + ico("i-heart") + "</button></div>";
+      }
     });
     if (theoState.typing) html += '<div class="typing"><i></i><i></i><i></i></div>';
     html += "</div>";
@@ -529,10 +570,21 @@
         return '<button class="chip" data-c="' + esc(c) + '">' + esc(c) + "</button>";
       }).join("") + "</div>";
 
-    html += '<div class="composer"><textarea id="theoInput" rows="1" placeholder="Tell Theo something"></textarea>' +
+    var canListen = window.BB_VOICE && window.BB_VOICE.canListen();
+    html += '<div class="composer">' +
+      (canListen ? '<button class="mic' + (theoState.listening ? " listening" : "") + '" id="theoMic" aria-label="Speak your message">' + ico("i-mic") + "</button>" : "") +
+      '<textarea id="theoInput" rows="1" placeholder="Tell Theo something"></textarea>' +
       '<button class="send" id="theoSend" aria-label="Send">' + ico("i-send", "fill") + "</button></div>";
     html += "</div>";
     v.innerHTML = html;
+
+    if (canSpeak) {
+      $("#theoVoiceToggle", v).onclick = function () {
+        store.set("theoVoice", !speakOn);
+        renderTheo();
+      };
+    }
+    if (canListen) wireMic($("#theoMic", v), $("#theoInput", v), sendTheo);
 
     $("#openKeeps", v).onclick = function () { theoState.drawer = true; renderTheo(); };
     $("#keepNote", v).onclick = function () {
@@ -561,6 +613,21 @@
       if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTheo(box.value); }
     };
     wireLongPress($("#theoThread", v));
+    $$(".keep-btn", v).forEach(function (b) {
+      b.onclick = function () {
+        var m = chat[+b.dataset.i];
+        if (!m) return;
+        var list = store.get("keepsakes", []);
+        var at = -1;
+        list.forEach(function (k, idx) { if (k.text === m.text) at = idx; });
+        if (at >= 0) { list.splice(at, 1); toast("Removed"); }
+        else { list.push({ text: m.text, date: today() }); toast("Kept"); }
+        store.set("keepsakes", list);
+        renderTheo();
+      };
+    });
+    var focusables = $$("#theoInput", v);
+    focusables.forEach(function (el) { el.addEventListener("focus", function () { setTimeout(scrollThread, 300); }); });
     scrollThread();
   }
 
@@ -614,6 +681,7 @@
       theoState.typing = false;
       theoState.offline = !!off;
       renderTheo();
+      if (voiceOn("theoVoice") && window.BB_VOICE) window.BB_VOICE.speak(reply);
     }
 
     var delay = 600 + Math.random() * 500;
@@ -714,11 +782,16 @@
     m.forEach(function (x) { if (x.date === today()) todayMood = x; });
     var chat = quietChat();
 
+    var speakOnQ = voiceOn("quietVoice");
+    var canSpeakQ = window.BB_VOICE && window.BB_VOICE.canSpeak();
     var html = '<div class="stack chat-view">';
     html += '<div class="card soft">' +
       '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px">' +
         '<h2 class="section-title" style="margin:0">How are you today?</h2>' +
+        '<div class="card-row" style="margin-top:0">' +
+        (canSpeakQ ? '<button class="btn small ghost" id="quietVoiceToggle" aria-pressed="' + speakOnQ + '">' + ico(speakOnQ ? "i-speaker" : "i-speaker-off") + "</button>" : "") +
         '<button class="btn small ghost" id="openJournal">' + ico("i-book") + "Journal</button>" +
+        "</div>" +
       "</div>" +
       '<div class="moods" id="moodRow">' +
         D.MOODS.map(function (mo) {
@@ -750,10 +823,16 @@
         return '<button class="chip" data-c="' + esc(c) + '">' + esc(c) + "</button>";
       }).join("") + "</div>";
 
-    html += '<div class="composer"><textarea id="quietInput" rows="1" placeholder="Say it however it comes out"></textarea>' +
+    var canListenQ = window.BB_VOICE && window.BB_VOICE.canListen();
+    html += '<div class="composer">' +
+      (canListenQ ? '<button class="mic" id="quietMic" aria-label="Speak your message">' + ico("i-mic") + "</button>" : "") +
+      '<textarea id="quietInput" rows="1" placeholder="Say it however it comes out"></textarea>' +
       '<button class="send" id="quietSend" aria-label="Send">' + ico("i-send", "fill") + "</button></div>";
     html += "</div>";
     v.innerHTML = html;
+
+    if (canSpeakQ) $("#quietVoiceToggle", v).onclick = function () { store.set("quietVoice", !speakOnQ); renderQuiet(); };
+    if (canListenQ) wireMic($("#quietMic", v), $("#quietInput", v), sendQuiet);
 
     $("#openJournal", v).onclick = function () { quietState.view = "journal"; renderQuiet(); };
     $$("#moodRow .mood", v).forEach(function (b) {
@@ -777,6 +856,7 @@
     $("#quietSend", v).onclick = function () { sendQuiet($("#quietInput", v).value); };
     var box = $("#quietInput", v);
     box.onkeydown = function (e) { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendQuiet(box.value); } };
+    box.addEventListener("focus", function () { setTimeout(scrollThread, 300); });
     scrollThread();
   }
 
@@ -806,6 +886,7 @@
       quietState.typing = false;
       quietState.offline = !!off;
       renderQuiet();
+      if (voiceOn("quietVoice") && window.BB_VOICE) window.BB_VOICE.speak(reply);
     }
 
     if (!hasKey()) { setTimeout(function () { land(scriptedQuiet(text), true); }, 900); return; }
@@ -1126,7 +1207,8 @@
       '<button class="btn primary wide" id="saveProfileBtn">Save</button>' +
 
       "<h3>Danger zone</h3>" +
-      '<button class="btn wide" id="resetAll">Reset everything</button>';
+      '<button class="btn wide" id="resetAll">Reset everything</button>' +
+      '<p class="meta" style="text-align:center;margin:22px 0 4px">Bluebird v' + esc(VERSION) + "</p>";
 
     var keyInput = $("#keyInput", body);
     keyInput.onchange = function () { store.set("geminiKey", keyInput.value.trim()); };
@@ -1180,15 +1262,24 @@
 
   function showWelcome() {
     var w = $("#welcome");
+    var p0 = profile();
+    var isIOS = window.BB_PWA && window.BB_PWA.isIOS();
     var cards = [
-      '<div class="wcard">' + bigBird() + "<h2>Hi Gabby.</h2>" +
-        "<p>This is Bluebird. It is yours, it lives on your phone, and nobody else can see any of it.</p></div>",
+      '<div class="wcard">' + bigBird() + "<h2>Hi there.</h2>" +
+        "<p>This is Bluebird. It is yours, it lives on your phone, and nobody else can see any of it.</p>" +
+        '<label class="field"><span>What should Theo call you</span><input id="welcomeName" placeholder="Gabby" value="' + esc(p0.name || "") + '"></label>' +
+        '<label class="field"><span>Where are you based</span><input id="welcomeCity" placeholder="Miami, FL" value="' + esc(p0.city || "") + '"></label></div>',
       '<div class="wcard"><h2>Four rooms.</h2>' +
         "<p><strong>Gigs</strong> hunts work and writes your pitch.<br><strong>Theo</strong> is a warm voice who keeps up with you.<br><strong>Quiet Room</strong> is for the heavier days.<br><strong>Daily</strong> is trivia, streaks and small wins.</p></div>",
       '<div class="wcard"><h2>One optional step.</h2>' +
         "<p>A free Google Gemini key makes the smart parts smart. Skip it and everything still works, just scripted.</p>" +
         '<label class="field"><span>Gemini key</span><input id="welcomeKey" type="password" placeholder="Paste here, or skip"></label>' +
-        '<p class="meta"><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Get a free key</a></p></div>'
+        '<p class="meta"><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Get a free key</a></p>' +
+        '<p class="meta" style="margin-top:16px;font-weight:800;color:var(--deep)">Put Bluebird on your home screen</p>' +
+        (isIOS
+          ? '<p class="meta">Tap the share icon, then "Add to Home Screen".</p>'
+          : '<p class="meta">Open the browser menu, then "Install app" (or "Add to Home Screen").</p>') +
+        "</div>"
     ];
     $("#welcomeCards").innerHTML = cards.join("");
     var dots = $("#welcomeDots");
@@ -1212,6 +1303,11 @@
       } else {
         var k = $("#welcomeKey");
         if (k && k.value.trim()) store.set("geminiKey", k.value.trim());
+        var np = profile();
+        var wn = $("#welcomeName"), wc = $("#welcomeCity");
+        np.name = (wn && wn.value.trim()) || np.name || "Gabby";
+        np.city = (wc && wc.value.trim()) || np.city || "Miami, FL";
+        saveProfile(np);
         store.set("onboarded", true);
         w.hidden = true;
         renderers[current]();
@@ -1224,6 +1320,7 @@
      BOOT
      ================================================================ */
   function boot() {
+    if (window.BB_PWA) window.BB_PWA.registerSW();
     var params = new URLSearchParams(location.search);
     var tab = params.get("tab");
     var skip = params.get("skipWelcome") === "1";

@@ -1,0 +1,34 @@
+{
+  "opens_without_key": true,
+  "tabs_render": ["gigs", "theo", "quiet", "daily"],
+  "pwa": {
+    "manifest_present": true,
+    "sw_registered": true,
+    "icons_192_512": true,
+    "apple_meta_tags": true
+  },
+  "theo_speaks": true,
+  "she_speaks_mic": true,
+  "welcome_upgrade": true,
+  "cache_busting_bumped": true,
+  "gemini_fallback_pill": true,
+  "crisis_card": true,
+  "localstorage_namespace_ok": true,
+  "no_emoji_in_source": true,
+  "no_key_in_source": true,
+  "console_errors": [],
+  "phone_pass": {
+    "no_horizontal_scroll": true,
+    "inputs_16px": true,
+    "safe_area_used": true,
+    "targets_44": true
+  },
+  "shots": [
+    "docs/shots/v2/round1-05-welcome.png",
+    "docs/shots/v2/round1-01-gigs.png",
+    "docs/shots/v2/round1-02-theo.png",
+    "docs/shots/v2/round1-03-quiet.png",
+    "docs/shots/v2/round1-04-daily.png",
+    "docs/shots/v2/round1-06-settings.png"
+  ]
+}
