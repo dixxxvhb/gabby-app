@@ -82,6 +82,8 @@ body.has-bow .bird-bow{display:block}
 @keyframes blink{0%,94%,100%{transform:scaleY(1)}96%{transform:scaleY(.1)}98%{transform:scaleY(1)}}
 @media (prefers-reduced-motion:reduce){.bird-eye{animation:none}}
 
+.bar-actions{display:flex;align-items:center;gap:4px}
+
 .icon-btn{
   width:44px;height:44px;border-radius:var(--r-pill);
   display:grid;place-items:center;color:var(--blue);

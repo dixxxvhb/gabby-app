@@ -1,0 +1,17 @@
+{
+  "share_icon_in_header_44px": true,
+  "share_sheet_opens_with_title": true,
+  "recap_preview_readonly_textarea": true,
+  "checkbox_theo_off_by_default": true,
+  "checkbox_mood_on_by_default": true,
+  "share_button_uses_navigator_share_or_copy_fallback": true,
+  "copy_button_shows_copied_message": true,
+  "free_text_note_appended_as_Note_line": true,
+  "recap_includes_key_status_and_last_ai_status": true,
+  "recap_includes_rooms_used_today": true,
+  "recap_includes_gigs_theo_quiet_daily_sections": true,
+  "no_network_calls_on_share": true,
+  "js_syntax_valid": true,
+  "16px_inputs": true,
+  "44px_tap_targets": true
+}

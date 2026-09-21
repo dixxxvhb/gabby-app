@@ -4,7 +4,7 @@
 
   var D = window.BB_DATA;
   var NS = "bluebird.";
-  var VERSION = "3.0";
+  var VERSION = "3.1";
   // Free-tier quotas are per model, so walk a chain when one is exhausted or retired.
   var MODELS = ["gemini-3.6-flash", "gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-latest",
                 "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3-flash-preview"];
@@ -133,6 +133,25 @@
   /* ============ gemini ============ */
   function hasKey() { return !!store.get("geminiKey", ""); }
 
+  function markAi(ok, model) {
+    store.set("lastAi", { ok: !!ok, model: model || null, t: Date.now() });
+  }
+
+  /* ============ usage counter (rooms opened today, for the recap) ============ */
+  function bumpUsage(tab) {
+    var all = store.get("usage", {});
+    var d = today();
+    // prune everything but today so this never grows
+    for (var k in all) if (k !== d) delete all[k];
+    if (!all[d]) all[d] = { gigs: 0, theo: 0, quiet: 0, daily: 0 };
+    if (tab in all[d]) all[d][tab] = (all[d][tab] || 0) + 1;
+    store.set("usage", all);
+  }
+  function usageToday() {
+    var all = store.get("usage", {});
+    return all[today()] || { gigs: 0, theo: 0, quiet: 0, daily: 0 };
+  }
+
   function gemini(opts, attempt, mi) {
     attempt = attempt || 0;
     if (mi === undefined) mi = modelIndex();
@@ -166,13 +185,17 @@
       if (j && j._done) return j._done;
       return j;
     }).then(function (j) {
-      if (j && j.text) return j;
+      if (j && j.text) { markAi(true, model); return j; }
       var cand = j && j.candidates && j.candidates[0];
       if (!cand) throw new Error("empty");
       var parts = (cand.content && cand.content.parts) || [];
       var text = parts.map(function (p) { return p.text || ""; }).join("").trim();
       if (!text) throw new Error("empty text");
+      markAi(true, model);
       return { text: text, grounding: cand.groundingMetadata || null };
+    }).catch(function (e) {
+      markAi(false, model);
+      throw e;
     });
   }
 
@@ -230,6 +253,7 @@
   function go(tab, replace) {
     if (TABS.indexOf(tab) < 0) tab = "gigs";
     current = tab;
+    bumpUsage(tab);
     TABS.forEach(function (t) {
       $("#view-" + t).hidden = t !== tab;
       var btn = $('.tab[data-tab="' + t + '"]');
@@ -700,12 +724,18 @@
         loc: gigsState.loc, radius: gigsState.radius,
         results: gigsState.results, offline: gigsState.offline, at: gigsState.at
       });
+      var log = store.get("searchLog", {});
+      var d = today();
+      for (var k in log) if (k !== d) delete log[k];
+      log[d] = (log[d] || 0) + 1;
+      store.set("searchLog", log);
     }
 
     function fallback() {
       gigsState.results = D.GIGS_FALLBACK;
       gigsState.offline = true;
       gigsState.busy = false;
+      markAi(false, null);
       persist();
       renderGigs();
     }
@@ -1078,7 +1108,7 @@
     text = String(text || "").trim();
     if (!text) return;
     var chat = theoChat();
-    chat.push({ role: "me", text: text });
+    chat.push({ role: "me", text: text, ts: Date.now() });
     setTheoChat(chat);
     theoState.typing = true;
     renderTheo();
@@ -1092,8 +1122,9 @@
         reply = reply.replace(/<mem>[\s\S]*?<\/mem>/gi, "").trim();
       }
       var c = theoChat();
-      c.push({ role: "them", text: reply });
+      c.push({ role: "them", text: reply, ts: Date.now() });
       setTheoChat(c);
+      if (off) markAi(false, null);
       theoState.typing = false;
       theoState.offline = !!off;
       renderTheo();
@@ -1335,6 +1366,7 @@
       var c = quietChat();
       c.push({ role: "them", text: reply });
       setQuietChat(c);
+      if (off) markAi(false, null);
       quietState.typing = false;
       quietState.offline = !!off;
       renderQuiet();
@@ -1880,6 +1912,131 @@
     };
   }
 
+  /* ================================================================
+     SHARE MY DAY
+     ================================================================ */
+  function isToday(ts) {
+    if (!ts) return false;
+    var d = new Date(ts);
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0") === today();
+  }
+  function truncate(s, n) {
+    s = String(s || "").replace(/\s+/g, " ").trim();
+    return s.length > n ? s.slice(0, n - 1) + "…" : s;
+  }
+
+  function buildRecapText(opts) {
+    opts = opts || {};
+    var p = profile();
+    var lines = [];
+    lines.push("Bluebird recap, " + today());
+    lines.push((p.name || "Gabby") + ", " + (p.city || "Miami, FL") + ", v" + VERSION);
+
+    var last = store.get("lastAi", null);
+    lines.push("Key: " + (hasKey() ? "set" : "not set") + "; last AI status: " + (last ? (last.ok ? "worked" : "offline") : "none yet"));
+
+    var u = usageToday();
+    lines.push("Rooms used today: Gigs " + u.gigs + ", Theo " + u.theo + ", Quiet Room " + u.quiet + ", Daily " + u.daily);
+
+    var sLog = store.get("searchLog", {});
+    var searches = sLog[today()] || 0;
+    var saved = savedGigs().length;
+    var upcoming = auditions().filter(function (a) { return a.date >= today(); }).length;
+    lines.push("Gigs: " + searches + " search" + (searches === 1 ? "" : "es") + " today, " + saved + " saved, " + upcoming + " upcoming");
+
+    var tChat = theoChat();
+    var tMsgsToday = tChat.filter(function (m) { return m.role === "me" && isToday(m.ts); }).length;
+    var keepCount = store.get("keepsakes", []).length;
+    var memCount = store.get("theoMemory", []).length;
+    lines.push("Theo: " + tMsgsToday + " message" + (tMsgsToday === 1 ? "" : "s") + " today, " + keepCount + " keepsakes, " + memCount + " memory lines");
+
+    var moodToday = null;
+    moods().forEach(function (x) { if (x.date === today()) moodToday = x; });
+    var winCount = store.get("wins", []).filter(function (x) { return x.date === today(); }).length;
+    var journalCount = Object.keys(store.get("journal", {})).filter(function (d) { return store.get("journal", {})[d] && store.get("journal", {})[d].trim(); }).length;
+    lines.push("Quiet Room: " + (moodToday ? "mood " + moodToday.mood + (moodToday.note ? " (" + truncate(moodToday.note, 60) + ")" : "") : "no check-in today") + ", " + winCount + " win" + (winCount === 1 ? "" : "s") + " today, " + journalCount + " journal entries");
+
+    var s = streak();
+    var rec = todayRecord();
+    var fiveDone = !!rec;
+    var beatTheo = !!(rec && rec.score > theoScoreToday());
+    lines.push("Daily: " + points() + " points, " + s.count + " day streak, today's five done " + (fiveDone ? "yes" : "no") + ", beat Theo " + (beatTheo ? "yes" : "no"));
+
+    if (opts.includeTheo) {
+      var pairs = [];
+      var i = tChat.length - 1;
+      while (i >= 0 && pairs.length < 5) {
+        if (tChat[i].role === "them") {
+          var themMsg = tChat[i];
+          var meMsg = (i > 0 && tChat[i - 1].role === "me") ? tChat[i - 1] : null;
+          pairs.unshift({ me: meMsg, them: themMsg });
+          i -= meMsg ? 2 : 1;
+        } else { i -= 1; }
+      }
+      if (pairs.length) {
+        lines.push("Last Theo exchanges:");
+        pairs.forEach(function (pr) {
+          if (pr.me) lines.push("Me: " + truncate(pr.me.text, 160));
+          lines.push("Theo: " + truncate(pr.them.text, 160));
+        });
+      }
+    }
+
+    if (opts.includeMood) {
+      lines.push(moodToday ? "Mood today: " + moodToday.mood + (moodToday.note ? ", " + truncate(moodToday.note, 160) : "") : "Mood today: no check-in.");
+      lines.push("Wins today: " + (winCount ? winCount : "none logged") + ".");
+    }
+
+    if (opts.note && opts.note.trim()) lines.push("Note: " + truncate(opts.note, 400));
+
+    return lines.join("\n");
+  }
+
+  var shareState = { includeTheo: false, includeMood: true, note: "" };
+
+  function openShareSheet() {
+    renderShareSheet();
+    $("#shareScrim").hidden = false;
+    $("#shareSheet").hidden = false;
+  }
+  function closeShareSheet() {
+    $("#shareScrim").hidden = true;
+    $("#shareSheet").hidden = true;
+  }
+
+  function renderShareSheet() {
+    var body = $("#shareSheetBody");
+    var text = buildRecapText(shareState);
+    body.innerHTML =
+      '<label class="field"><span>Preview</span><textarea id="shareRecapPreview" readonly rows="14">' + esc(text) + "</textarea></label>" +
+      '<label class="checkline"><input type="checkbox" id="shareIncludeTheo"' + (shareState.includeTheo ? " checked" : "") + '><span>Include my last 5 Theo messages</span></label>' +
+      '<label class="checkline"><input type="checkbox" id="shareIncludeMood"' + (shareState.includeMood ? " checked" : "") + '><span>Include today\'s mood and wins</span></label>' +
+      '<label class="field"><span>Anything you want Dixon to know</span><textarea id="shareNote" rows="3" placeholder="Optional">' + esc(shareState.note) + "</textarea></label>" +
+      '<div class="card-row"><button class="btn primary" id="shareSendBtn">' + ico("i-out") + "Share</button>" +
+      '<button class="btn" id="shareCopyBtn">' + ico("i-copy") + "Copy</button></div>" +
+      '<p class="meta" id="shareStatus" style="text-align:center;margin-top:10px"></p>';
+
+    $("#shareIncludeTheo", body).onchange = function () { shareState.includeTheo = this.checked; renderShareSheet(); };
+    $("#shareIncludeMood", body).onchange = function () { shareState.includeMood = this.checked; renderShareSheet(); };
+    $("#shareNote", body).oninput = function () { shareState.note = this.value; };
+
+    $("#shareCopyBtn", body).onclick = function () {
+      copy(buildRecapText(shareState));
+      var st = $("#shareStatus");
+      if (st) st.textContent = "Copied, paste it to Dixon.";
+    };
+    $("#shareSendBtn", body).onclick = function () {
+      var full = buildRecapText(shareState);
+      var st = $("#shareStatus");
+      if (navigator.share) {
+        navigator.share({ text: full }).catch(function () {});
+      } else {
+        copy(full);
+        if (st) st.textContent = "Copied, paste it to Dixon.";
+      }
+    };
+  }
+
   function parseBioJson(text) {
     var t = String(text).trim().replace(/^```[a-z]*\s*/i, "").replace(/```\s*$/, "").trim();
     var a = t.indexOf("{"), b = t.lastIndexOf("}");
@@ -1927,6 +2084,7 @@
     var p = profile();
 
     function land(b) {
+      if (b.offline) markAi(false, null);
       store.set("bio", b);
       btn.disabled = false;
       btn.textContent = "Write my bio";
@@ -2036,8 +2194,12 @@
     $("#openSettings").onclick = openSheet;
     $("#closeSettings").onclick = closeSheet;
     $("#scrim").onclick = closeSheet;
+    $("#openShare").onclick = openShareSheet;
+    $("#closeShare").onclick = closeShareSheet;
+    $("#shareScrim").onclick = closeShareSheet;
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && !$("#sheet").hidden) closeSheet();
+      if (e.key === "Escape" && !$("#shareSheet").hidden) closeShareSheet();
     });
     window.addEventListener("popstate", function () {
       var t = new URLSearchParams(location.search).get("tab");
