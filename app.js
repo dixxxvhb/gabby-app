@@ -99,7 +99,8 @@
   /* ============ gemini ============ */
   function hasKey() { return !!store.get("geminiKey", ""); }
 
-  function gemini(opts) {
+  function gemini(opts, attempt) {
+    attempt = attempt || 0;
     var key = store.get("geminiKey", "");
     if (!key) return Promise.reject(new Error("no key"));
     var body = { contents: opts.contents };
@@ -111,9 +112,18 @@
       headers: { "Content-Type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify(body)
     }).then(function (r) {
+      if ((r.status === 503 || r.status === 500) && attempt < 2) {
+        return new Promise(function (res) { setTimeout(res, 1500 * (attempt + 1)); })
+          .then(function () { return gemini(opts, attempt + 1); })
+          .then(function (out) { return { _done: out }; });
+      }
       if (!r.ok) throw new Error("http " + r.status);
       return r.json();
     }).then(function (j) {
+      if (j && j._done) return j._done;
+      return j;
+    }).then(function (j) {
+      if (j && j.text) return j;
       var cand = j && j.candidates && j.candidates[0];
       if (!cand) throw new Error("empty");
       var parts = (cand.content && cand.content.parts) || [];
