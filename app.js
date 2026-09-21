@@ -1985,7 +1985,13 @@
 
     var strip = $("#welcomeCards");
     var next = $("#welcomeNext");
-    function at() { return Math.round(strip.scrollLeft / strip.clientWidth); }
+    function slides() { return $$(".wcard", strip); }
+    function at() {
+      // nearest card by real offset; dividing by width drifts when the browser adds scroll slack
+      var x = strip.scrollLeft, best = 0, bd = Infinity;
+      slides().forEach(function (c, i) { var d = Math.abs(c.offsetLeft - x); if (d < bd) { bd = d; best = i; } });
+      return best;
+    }
     function sync() {
       var i = at();
       $$("i", dots).forEach(function (d, j) { d.className = j === i ? "on" : ""; });
@@ -1995,8 +2001,9 @@
     next.onclick = function () {
       var i = at();
       if (i < cards.length - 1) {
-        strip.scrollTo({ left: (i + 1) * strip.clientWidth, behavior: "smooth" });
-        setTimeout(sync, 350);
+        var target = slides()[i + 1];
+        strip.scrollTo({ left: target ? target.offsetLeft : (i + 1) * strip.clientWidth, behavior: "smooth" });
+        setTimeout(sync, 400);
       } else {
         var k = $("#welcomeKey");
         if (k && k.value.trim()) store.set("geminiKey", k.value.trim());
