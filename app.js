@@ -1123,6 +1123,10 @@
     $("#testKey", body).onclick = function () {
       store.set("geminiKey", keyInput.value.trim());
       var st = $("#keyStatus", body);
+      if (keyInput.value.trim().indexOf("AIza") !== 0) {
+        st.innerHTML = '<span class="pill warm">that is not a Gemini key. Real ones start with AIza and are 39 characters</span>';
+        return;
+      }
       st.innerHTML = '<span class="pill">testing</span>';
       gemini({ contents: [{ role: "user", parts: [{ text: "Reply with the single word: ready" }] }] })
         .then(function () { st.innerHTML = '<span class="pill good">' + ico("i-check") + "working</span>"; })
