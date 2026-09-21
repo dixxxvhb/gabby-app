@@ -149,7 +149,8 @@
       body: JSON.stringify(body)
     }).then(function (r) {
       var exhausted = r.status === 429 || r.status === 404 || (r.status === 503 && attempt >= 1);
-      if (exhausted && mi + 1 < MODELS.length) {
+      if (exhausted && !opts.tools && mi + 1 < MODELS.length) {
+        // (grounded calls skip the chain: search quota is per key, so every model would say no)
         // this model is out of free quota, retired, or swamped: move down the chain
         return gemini(opts, 0, mi + 1).then(function (out) { return { _done: out }; });
       }
