@@ -5,7 +5,7 @@
   var D = window.BB_DATA;
   var NS = "bluebird.";
   var MODEL = "gemini-2.5-flash";
-  var ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/" + MODEL + ":generateContent?key=";
+  var ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/" + MODEL + ":generateContent";
 
   /* ============ storage ============ */
   var store = {
@@ -105,9 +105,9 @@
     var body = { contents: opts.contents };
     if (opts.system) body.systemInstruction = { parts: [{ text: opts.system }] };
     if (opts.tools) body.tools = opts.tools;
-    return fetch(ENDPOINT + encodeURIComponent(key), {
+    return fetch(ENDPOINT, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify(body)
     }).then(function (r) {
       if (!r.ok) throw new Error("http " + r.status);
@@ -1123,10 +1123,6 @@
     $("#testKey", body).onclick = function () {
       store.set("geminiKey", keyInput.value.trim());
       var st = $("#keyStatus", body);
-      if (keyInput.value.trim().indexOf("AIza") !== 0) {
-        st.innerHTML = '<span class="pill warm">that is not a Gemini key. Real ones start with AIza and are 39 characters</span>';
-        return;
-      }
       st.innerHTML = '<span class="pill">testing</span>';
       gemini({ contents: [{ role: "user", parts: [{ text: "Reply with the single word: ready" }] }] })
         .then(function () { st.innerHTML = '<span class="pill good">' + ico("i-check") + "working</span>"; })
